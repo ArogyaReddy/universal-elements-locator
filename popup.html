@@ -82,6 +82,44 @@
       cursor: not-allowed;
     }
 
+    .scan-buttons {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 15px;
+    }
+
+    .scan-button {
+      flex: 1;
+    }
+
+    .view-results-button {
+      flex: 1;
+      padding: 12px;
+      background: linear-gradient(45deg, #667eea, #764ba2);
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .view-results-button:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+
+    .view-results-button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      background: linear-gradient(45deg, #ccc, #999);
+    }
+
+    .scan-section {
+      margin-bottom: 20px;
+    }
+
     .options {
       margin: 15px 0;
     }
@@ -286,9 +324,14 @@
     </div>
 
     <div class="scan-section">
-      <button id="scanButton" class="scan-button">
-        🔍 Scan Page Elements
-      </button>
+      <div class="scan-buttons">
+        <button id="scanButton" class="scan-button">
+          🔍 Scan Page Elements
+        </button>
+        <button id="viewResultsButton" class="view-results-button" disabled>
+          📋 View Scanned Results
+        </button>
+      </div>
     </div>
 
     <div class="tools-section" id="individualTools">

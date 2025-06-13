@@ -174,6 +174,53 @@ function getRelevantStyles(element) {
   }
 }
 
+// Highlighting functionality
+let highlightedElements = [];
+
+function highlightElement(element) {
+  if (!element || highlightedElements.includes(element)) return;
+  
+  // Store original styles
+  const originalOutline = element.style.outline;
+  const originalBoxShadow = element.style.boxShadow;
+  const originalZIndex = element.style.zIndex;
+  
+  // Apply highlighting
+  element.style.outline = '2px solid #00ff88';
+  element.style.boxShadow = '0 0 8px rgba(0, 255, 136, 0.6)';
+  element.style.zIndex = '999999';
+  
+  // Store element and original styles for cleanup
+  element._originalStyles = {
+    outline: originalOutline,
+    boxShadow: originalBoxShadow,
+    zIndex: originalZIndex
+  };
+  
+  highlightedElements.push(element);
+  
+  // Add a gentle flash effect
+  element.style.transition = 'all 0.3s ease';
+  setTimeout(() => {
+    if (element.style.outline.includes('#00ff88')) {
+      element.style.outline = '2px solid rgba(0, 255, 136, 0.8)';
+    }
+  }, 100);
+}
+
+function clearAllHighlighting() {
+  highlightedElements.forEach(element => {
+    if (element && element._originalStyles) {
+      element.style.outline = element._originalStyles.outline;
+      element.style.boxShadow = element._originalStyles.boxShadow;
+      element.style.zIndex = element._originalStyles.zIndex;
+      element.style.transition = '';
+      delete element._originalStyles;
+    }
+  });
+  highlightedElements = [];
+}
+
 // Simple initialization
 if (!window.universalLocatorInjected) {
   window.universalLocatorInjected = true;
@@ -188,8 +235,15 @@ if (!window.universalLocatorInjected) {
         break;
         
       case 'scanPage':
+      case 'scanPageWithHighlighting':
         try {
           console.log('🔍 Content: Starting visible elements scan...');
+          const scanOptions = request.options || {};
+          const shouldHighlight = request.action === 'scanPageWithHighlighting' && scanOptions.highlight !== false;
+          
+          // Clear any existing highlighting first
+          clearAllHighlighting();
+          
           const elements = document.querySelectorAll('*');
           const results = [];
           let totalChecked = 0;
@@ -198,6 +252,7 @@ if (!window.universalLocatorInjected) {
           let skippedByVisibility = 0;
           
           console.log(`🔍 Content: Found ${elements.length} total elements to check`);
+          console.log(`🔍 Content: Highlighting enabled: ${shouldHighlight}`);
           
           // Scan for visible elements only
           for (let i = 0; i < elements.length && results.length < 200; i++) {
@@ -218,6 +273,11 @@ if (!window.universalLocatorInjected) {
             
             visibleFound++;
             const rect = el.getBoundingClientRect();
+            
+            // Highlight element if enabled
+            if (shouldHighlight) {
+              highlightElement(el);
+            }
             
             // Enhanced element data with detailed context and attributes
             const elementData = {
@@ -417,6 +477,15 @@ if (!window.universalLocatorInjected) {
           };
 
           sendResponse({ success: true, results, stats });
+        } catch (error) {
+          sendResponse({ success: false, error: error.message });
+        }
+        break;
+      
+      case 'clearHighlighting':
+        try {
+          clearAllHighlighting();
+          sendResponse({ success: true });
         } catch (error) {
           sendResponse({ success: false, error: error.message });
         }
