@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Universal Element Locator - Scan Results</title>
+    <title>Universal Element Locator - Locator Results</title>
     <style>
         * {
             margin: 0;
@@ -110,6 +110,34 @@
         .stat-label {
             font-size: 12px;
             opacity: 0.9;
+        }
+
+        .clickable-stat {
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            position: relative;
+            user-select: none;
+        }
+
+        .clickable-stat:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .clickable-stat.active-sort {
+            box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+            transform: translateY(-3px);
+        }
+
+        .sort-indicator {
+            font-size: 10px;
+            margin-top: 2px;
+            opacity: 0.5;
+            transition: opacity 0.2s ease;
+        }
+
+        .clickable-stat.active-sort .sort-indicator {
+            opacity: 1;
         }
 
         .elements-section {
@@ -568,6 +596,41 @@
             transform: scale(1.1);
         }
 
+        .locator-actions {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+            margin-left: 6px;
+        }
+
+        .highlight-btn {
+            background: #f59e0b;
+            color: white;
+            border: none;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-size: 8px;
+            cursor: pointer;
+            opacity: 0.8;
+            transition: all 0.2s;
+            flex-shrink: 0;
+            min-width: 20px;
+            height: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .highlight-btn:hover {
+            background: #d97706;
+            opacity: 1;
+            transform: scale(1.1);
+        }
+
+        .highlight-btn:active {
+            transform: scale(0.95);
+        }
+
         /* Animation for copy notifications */
         @keyframes slideIn {
             from {
@@ -963,7 +1026,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎯 Scan Results</h1>
+            <h1 id="pageHeader">Locator Results</h1>
             <div class="subtitle">Detailed analysis of page elements and their locators</div>
             
             <div class="scan-info" id="scanInfo">

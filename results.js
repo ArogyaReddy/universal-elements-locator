@@ -48,6 +48,13 @@ function displayResults() {
         new Date(scanResults.timestamp).toLocaleString() : 'Unknown';
     document.getElementById('scanDuration').textContent = `${scanResults.duration || 0}ms`;
 
+    // Update main page header with dynamic title
+    const pageHeader = document.getElementById('pageHeader');
+    if (pageHeader) {
+        const pageTitle = scanResults.title || 'Unknown Page';
+        pageHeader.textContent = `${pageTitle} : Locator Results`;
+    }
+
     // Update statistics
     displayStatistics();
 
@@ -94,19 +101,165 @@ function displayResults() {
 
 function displayStatistics() {
     const stats = [
-        { label: 'Total Elements', value: scanResults.totalElements || 0, color: '#667eea' },
-        { label: 'Primary Locators', value: scanResults.elementsWithPrimary || 0, color: '#10b981' },
-        { label: 'Secondary Locators', value: scanResults.elementsWithSecondary || 0, color: '#f59e0b' },
-        { label: 'Shadow DOM', value: scanResults.shadowDOMElements || 0, color: '#8b5cf6' }
+        { 
+            label: 'Total Elements', 
+            value: scanResults.totalElements || 0, 
+            color: '#667eea',
+            sortKey: 'total',
+            tooltip: 'Click to sort by element index'
+        },
+        { 
+            label: 'Primary Locators', 
+            value: scanResults.elementsWithPrimary || 0, 
+            color: '#10b981',
+            sortKey: 'primary',
+            tooltip: 'Click to sort by primary locator count'
+        },
+        { 
+            label: 'Secondary Locators', 
+            value: scanResults.elementsWithSecondary || 0, 
+            color: '#f59e0b',
+            sortKey: 'secondary',
+            tooltip: 'Click to sort by secondary locator count'
+        },
+        { 
+            label: 'Shadow DOM', 
+            value: scanResults.shadowDOMElements || 0, 
+            color: '#8b5cf6',
+            sortKey: 'shadowDOM',
+            tooltip: 'Click to sort by Shadow DOM elements first'
+        }
     ];
 
     const statsGrid = document.getElementById('statsGrid');
     statsGrid.innerHTML = stats.map(stat => `
-        <div class="stat-card" style="background: linear-gradient(135deg, ${stat.color}, ${stat.color}dd)">
+        <div class="stat-card clickable-stat" 
+             data-sort-key="${stat.sortKey}" 
+             title="${stat.tooltip}"
+             style="background: linear-gradient(135deg, ${stat.color}, ${stat.color}dd); cursor: pointer; transition: transform 0.2s ease;">
             <div class="stat-number">${stat.value}</div>
             <div class="stat-label">${stat.label}</div>
+            <div class="sort-indicator">⬍⬌</div>
         </div>
     `).join('');
+
+    // Add click event listeners for sorting
+    document.querySelectorAll('.clickable-stat').forEach(card => {
+        card.addEventListener('click', () => {
+            const sortKey = card.getAttribute('data-sort-key');
+            sortElementsByStat(sortKey);
+            
+            // Visual feedback
+            document.querySelectorAll('.clickable-stat').forEach(c => c.classList.remove('active-sort'));
+            card.classList.add('active-sort');
+        });
+
+        // Add hover effects
+        card.addEventListener('mouseenter', () => {
+            card.style.transform = 'translateY(-2px)';
+            card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+        });
+
+        card.addEventListener('mouseleave', () => {
+            card.style.transform = 'translateY(0)';
+            card.style.boxShadow = 'none';
+        });
+    });
+}
+
+// Sorting functionality for statistics cards
+let currentSortKey = null;
+let currentSortDirection = 'desc'; // 'asc' or 'desc'
+
+function sortElementsByStat(sortKey) {
+    console.log('🔄 Sorting elements by:', sortKey);
+    
+    // Toggle direction if clicking the same sort key
+    if (currentSortKey === sortKey) {
+        currentSortDirection = currentSortDirection === 'desc' ? 'asc' : 'desc';
+    } else {
+        currentSortDirection = 'desc'; // Default to descending for new sort
+        currentSortKey = sortKey;
+    }
+    
+    // Create a copy of filtered elements for sorting
+    const elementsToSort = [...filteredElements];
+    
+    // Sort based on the selected criteria
+    elementsToSort.sort((a, b) => {
+        let valueA, valueB;
+        
+        switch (sortKey) {
+            case 'total':
+                // Sort by element index (original order)
+                valueA = a.index || 0;
+                valueB = b.index || 0;
+                break;
+                
+            case 'primary':
+                // Sort by number of primary locators
+                valueA = (a.locators?.primary?.length || 0);
+                valueB = (b.locators?.primary?.length || 0);
+                break;
+                
+            case 'secondary':
+                // Sort by number of secondary locators
+                valueA = (a.locators?.secondary?.length || 0);
+                valueB = (b.locators?.secondary?.length || 0);
+                break;
+                
+            case 'shadowDOM':
+                // Sort by Shadow DOM status (Shadow DOM elements first when desc)
+                valueA = a.isShadowDOM ? 1 : 0;
+                valueB = b.isShadowDOM ? 1 : 0;
+                break;
+                
+            default:
+                valueA = a.index || 0;
+                valueB = b.index || 0;
+        }
+        
+        // Apply sorting direction
+        if (currentSortDirection === 'desc') {
+            return valueB - valueA;
+        } else {
+            return valueA - valueB;
+        }
+    });
+    
+    // Update filtered elements with sorted order
+    filteredElements = elementsToSort;
+    
+    // Reset to first page when sorting
+    currentPage = 1;
+    
+    // Re-display elements
+    displayElements();
+    
+    // Update sort indicator
+    updateSortIndicator(sortKey, currentSortDirection);
+    
+    console.log('✅ Sorted elements by', sortKey, 'in', currentSortDirection, 'order');
+}
+
+function updateSortIndicator(sortKey, direction) {
+    // Update sort indicators on all stat cards
+    document.querySelectorAll('.clickable-stat').forEach(card => {
+        const indicator = card.querySelector('.sort-indicator');
+        const cardSortKey = card.getAttribute('data-sort-key');
+        
+        if (cardSortKey === sortKey) {
+            // Active sort
+            indicator.textContent = direction === 'desc' ? '⬇' : '⬆';
+            indicator.style.opacity = '1';
+            card.classList.add('active-sort');
+        } else {
+            // Inactive sort
+            indicator.textContent = '⬍⬌';
+            indicator.style.opacity = '0.5';
+            card.classList.remove('active-sort');
+        }
+    });
 }
 
 function displayElements() {
@@ -359,7 +512,10 @@ function createLocatorsList(locators, type) {
                     <div class="locator-type">${loc.type}</div>
                     <div class="locator-value" title="${escapeHtml(loc.selector)}">${escapeHtml(loc.selector)}</div>
                 </div>
-                <button class="copy-single-btn" data-action="copy-single" data-locator="${escapeHtml(loc.selector)}" title="Copy this locator">📋</button>
+                <div class="locator-actions">
+                    <button class="highlight-btn" data-action="highlight" data-locator="${escapeHtml(loc.selector)}" title="Highlight this element on the page">🎯</button>
+                    <button class="copy-single-btn" data-action="copy-single" data-locator="${escapeHtml(loc.selector)}" title="Copy this locator">📋</button>
+                </div>
             </div>`
         ).join('')}
     </div>`;
@@ -621,6 +777,11 @@ function setupEventListeners() {
                     const text = locators.join('\n');
                     copyToClipboard(text);
                 }
+            } else if (action === 'highlight') {
+                const locator = event.target.getAttribute('data-locator');
+                if (locator) {
+                    highlightElementOnPage(locator);
+                }
             }
         }
     });
@@ -630,33 +791,55 @@ function setupEventListeners() {
 function createTextContentDisplay(element) {
     console.log('🔍 Debug: createTextContentDisplay called with element:', element);
     
-    // Try multiple possible text sources
-    const possibleTexts = [
-        element.textContent?.cleanText,
-        element.textContent?.innerText,
-        element.textContent?.textContent,
-        element.text,
-        element.innerText,
-        element.textContent
-    ];
+    // Handle the textContent object structure from content.js
+    let textToDisplay = '';
     
-    console.log('🔍 Debug: Possible text sources:', possibleTexts);
+    if (element.textContent && typeof element.textContent === 'object') {
+        // textContent is an object with innerText, textContent, cleanText, hasText
+        console.log('🔍 Debug: textContent object:', element.textContent);
+        
+        const possibleTexts = [
+            element.textContent.cleanText,
+            element.textContent.innerText,
+            element.textContent.textContent
+        ];
+        
+        textToDisplay = possibleTexts.find(text => {
+            const textStr = safeString(text);
+            return textStr && safeTrim(textStr).length > 0;
+        }) || '';
+    } else {
+        // Fallback for other possible text sources
+        const possibleTexts = [
+            element.textContent,
+            element.text,
+            element.innerText
+        ];
+        
+        textToDisplay = possibleTexts.find(text => {
+            const textStr = safeString(text);
+            return textStr && safeTrim(textStr).length > 0;
+        }) || '';
+    }
     
-    const actualText = possibleTexts.find(text => {
-        const textStr = safeString(text);
-        return textStr && safeTrim(textStr).length > 0;
-    });
+    console.log('🔍 Debug: Final textToDisplay:', textToDisplay);
     
-    if (!actualText) {
+    if (!textToDisplay) {
         return '<span class="no-text">No text content</span>';
     }
     
-    const textStr = safeString(actualText);
-    const safeSubstring = textStr.length > 40 ? textStr.substring(0, 40) : textStr;
+    const textStr = safeString(textToDisplay);
+    const trimmedText = safeTrim(textStr);
+    
+    if (trimmedText.length === 0) {
+        return '<span class="no-text">No text content</span>';
+    }
+    
+    const safeSubstring = trimmedText.length > 40 ? trimmedText.substring(0, 40) : trimmedText;
     return `
         <div class="text-content-display">
-            <div class="text-summary" title="${escapeHtml(textStr)}">
-                ${escapeHtml(safeSubstring)}${textStr.length > 40 ? '...' : ''}
+            <div class="text-summary" title="${escapeHtml(trimmedText)}">
+                ${escapeHtml(safeSubstring)}${trimmedText.length > 40 ? '...' : ''}
             </div>
         </div>
     `;
@@ -925,4 +1108,96 @@ function exportToCSV() {
 function showNoData() {
     document.getElementById('elementsContainer').innerHTML = 
         '<div class="no-data">No scan results found. Please run a scan first.</div>';
+}
+
+// Function to highlight elements on the original page
+async function highlightElementOnPage(selector) {
+    try {
+        console.log('🎯 Attempting to highlight element with selector:', selector);
+        
+        // Get the current active tab to send the highlight message
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        
+        if (!tab || !tab.id) {
+            console.error('❌ No active tab found');
+            showNotification('No active tab found', 'error');
+            return;
+        }
+        
+        // Check if the tab URL matches the scanned page URL
+        if (scanResults && scanResults.url && !tab.url.includes(scanResults.url.split('#')[0])) {
+            console.log('⚠️ Active tab URL does not match scanned page');
+            showNotification('Please switch to the scanned page tab to highlight elements', 'warning');
+            return;
+        }
+        
+        // Send message to content script to highlight the element
+        const response = await chrome.tabs.sendMessage(tab.id, {
+            action: 'highlightElement',
+            selector: selector
+        });
+        
+        if (response && response.success) {
+            if (response.found) {
+                console.log('✅ Element highlighted successfully');
+                showNotification('Element highlighted on page', 'success');
+            } else {
+                console.log('⚠️ Element not found for highlighting');
+                showNotification('Element not found on current page', 'warning');
+            }
+        } else {
+            console.error('❌ Failed to highlight element:', response?.error);
+            showNotification('Failed to highlight element', 'error');
+        }
+        
+    } catch (error) {
+        console.error('❌ Error highlighting element:', error);
+        showNotification('Error highlighting element: ' + error.message, 'error');
+    }
+}
+
+// Function to show notification messages
+function showNotification(message, type = 'info') {
+    // Create notification element if it doesn't exist
+    let notification = document.getElementById('notification');
+    if (!notification) {
+        notification = document.createElement('div');
+        notification.id = 'notification';
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            z-index: 10000;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            max-width: 300px;
+            word-wrap: break-word;
+        `;
+        document.body.appendChild(notification);
+    }
+    
+    // Set styles based on type
+    const colors = {
+        success: { bg: '#10b981', text: 'white' },
+        error: { bg: '#ef4444', text: 'white' },
+        warning: { bg: '#f59e0b', text: 'white' },
+        info: { bg: '#3b82f6', text: 'white' }
+    };
+    
+    const color = colors[type] || colors.info;
+    notification.style.backgroundColor = color.bg;
+    notification.style.color = color.text;
+    notification.textContent = message;
+    
+    // Show notification
+    notification.style.opacity = '1';
+    
+    // Hide after 3 seconds
+    setTimeout(() => {
+        notification.style.opacity = '0';
+    }, 3000);
 }

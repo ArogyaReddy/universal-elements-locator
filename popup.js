@@ -27,24 +27,73 @@ document.addEventListener('DOMContentLoaded', () => {
       
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       
-      if (!tab || !tab.url.startsWith('http')) {
-        setStatus('This extension only works on web pages');
+      if (!tab || !tab.url) {
+        console.log('🔍 Popup: No tab or URL available:', { tab: !!tab, url: tab?.url });
+        setStatus('No active tab found');
         if (scanBtn) scanBtn.disabled = false;
         return;
       }
       
+      // Check if URL is supported (exclude browser internal pages)
+      const url = tab.url;
+      const isSupported = url.startsWith('http://') || 
+                         url.startsWith('https://') || 
+                         url.startsWith('file://') ||
+                         url.startsWith('data:text/html');
+      
+      const isBlocked = url.startsWith('chrome://') || 
+                       url.startsWith('chrome-extension://') ||
+                       url.startsWith('moz-extension://') ||
+                       url.startsWith('about:') ||
+                       url.startsWith('edge://') ||
+                       url.startsWith('brave://');
+      
+      if (!isSupported || isBlocked) {
+        console.log('🔍 Popup: Unsupported URL:', { url, isSupported, isBlocked });
+        setStatus('This page type is not supported - please try a website or HTML file');
+        if (scanBtn) scanBtn.disabled = false;
+        return;
+      }
+      
+      console.log('🔍 Popup: Starting scan on tab:', { id: tab.id, url: tab.url });
+      
       // Ensure content script is injected
       try {
+        console.log('🔍 Popup: Injecting content script...');
         await chrome.scripting.executeScript({
           target: { tabId: tab.id },
           files: ['content.js']
         });
+        console.log('🔍 Popup: Content script injected successfully');
       } catch (error) {
-        console.log('Content script injection note:', error.message);
+        console.log('🔍 Popup: Content script injection error:', error);
+        if (error.message.includes('Cannot access')) {
+          setStatus('Cannot access this page - try a different website or enable file access');
+          if (scanBtn) scanBtn.disabled = false;
+          return;
+        }
       }
       
-      // Wait for script to be ready
-      await new Promise(resolve => setTimeout(resolve, 300));
+      // Wait for script to be ready and test communication
+      console.log('🔍 Popup: Waiting for content script to be ready...');
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Test if content script is responsive
+      try {
+        const pingResponse = await chrome.tabs.sendMessage(tab.id, { action: 'ping' });
+        console.log('🔍 Popup: Content script ping response:', pingResponse);
+        if (!pingResponse || !pingResponse.success) {
+          console.log('🔍 Popup: Content script not responding to ping');
+          setStatus('Content script not ready - please try again');
+          if (scanBtn) scanBtn.disabled = false;
+          return;
+        }
+      } catch (pingError) {
+        console.log('🔍 Popup: Content script ping failed:', pingError);
+        setStatus('Cannot communicate with page - please try again');
+        if (scanBtn) scanBtn.disabled = false;
+        return;
+      }
       
       // Check highlighting preference
       const highlightEnabled = document.getElementById('highlightDuringScan')?.checked ?? true;
@@ -68,24 +117,65 @@ document.addEventListener('DOMContentLoaded', () => {
             }
           });
           
-          if (!scanResponse || !scanResponse.success) {
+          console.log(`🔍 Popup: Scan attempt ${retryCount + 1} response:`, scanResponse);
+          
+          if (!scanResponse) {
+            console.log(`🔍 Popup: No response received on attempt ${retryCount + 1}`);
             retryCount++;
             if (retryCount < maxRetries) {
-              console.log(`🔍 Popup: Scan attempt failed, retrying in 500ms...`);
-              await new Promise(resolve => setTimeout(resolve, 500));
+              console.log(`🔍 Popup: Retrying in 1000ms...`);
+              await new Promise(resolve => setTimeout(resolve, 1000));
             }
+            continue;
           }
+          
+          if (!scanResponse.success) {
+            console.log(`🔍 Popup: Scan failed on attempt ${retryCount + 1}:`, scanResponse.error || 'Unknown error');
+            retryCount++;
+            if (retryCount < maxRetries) {
+              console.log(`🔍 Popup: Retrying in 1000ms...`);
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+            continue;
+          }
+          
+          // Success - break out of retry loop
+          break;
+          
         } catch (error) {
           console.log(`🔍 Popup: Scan attempt ${retryCount + 1} error:`, error);
+          
+          if (error.message.includes('Receiving end does not exist')) {
+            console.log('🔍 Popup: Content script disconnected, re-injecting...');
+            try {
+              await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                files: ['content.js']
+              });
+              await new Promise(resolve => setTimeout(resolve, 500));
+            } catch (injectionError) {
+              console.log('🔍 Popup: Re-injection failed:', injectionError);
+            }
+          }
+          
           retryCount++;
           if (retryCount < maxRetries) {
-            await new Promise(resolve => setTimeout(resolve, 500));
+            console.log(`🔍 Popup: Retrying in 1000ms...`);
+            await new Promise(resolve => setTimeout(resolve, 1000));
           }
         }
       }
       
       if (!scanResponse || !scanResponse.success) {
-        setStatus('Scan failed - please try again');
+        console.log('🔍 Popup: All scan attempts failed');
+        console.log('🔍 Popup: Final scan response:', scanResponse);
+        
+        let errorMessage = 'Scan failed - please try again';
+        if (scanResponse && scanResponse.error) {
+          errorMessage = `Scan failed: ${scanResponse.error}`;
+        }
+        
+        setStatus(errorMessage);
         if (scanBtn) scanBtn.disabled = false;
         return;
       }
@@ -203,6 +293,6 @@ document.addEventListener('DOMContentLoaded', () => {
   if (viewResultsBtn) viewResultsBtn.onclick = viewResults;
   
   // Set initial state
-  setStatus('Ready to scan any webpage!');
+  setStatus('Ready to scan any webpage or HTML file!');
   enableViewResults(false);
 });

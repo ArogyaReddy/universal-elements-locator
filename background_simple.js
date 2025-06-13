@@ -1,5 +1,5 @@
 /* global chrome */
-// Background script - Simple working version from 11:19 era
+// Background script - Enhanced working version
 
 console.log('Universal Element Locator background script loaded');
 
@@ -7,17 +7,33 @@ chrome.runtime.onInstalled.addListener(() => {
   console.log('Extension installed successfully');
 });
 
-// Simple auto-injection when pages load
+// Enhanced auto-injection when pages load
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.status === 'complete' && tab.url && tab.url.startsWith('http')) {
-    // Small delay to ensure page is ready
-    setTimeout(() => {
-      chrome.scripting.executeScript({
-        target: { tabId },
-        files: ['content_simple.js']
-      }).catch(() => {
-        // Silently ignore injection failures (e.g., on chrome:// pages)
-      });
-    }, 200);
+  if (changeInfo.status === 'complete' && tab.url) {
+    // Check if URL is supported (exclude browser internal pages)
+    const url = tab.url;
+    const isSupported = url.startsWith('http://') || 
+                       url.startsWith('https://') || 
+                       url.startsWith('file://') ||
+                       url.startsWith('data:text/html');
+    
+    const isBlocked = url.startsWith('chrome://') || 
+                     url.startsWith('chrome-extension://') ||
+                     url.startsWith('moz-extension://') ||
+                     url.startsWith('about:') ||
+                     url.startsWith('edge://') ||
+                     url.startsWith('brave://');
+    
+    if (isSupported && !isBlocked) {
+      // Small delay to ensure page is ready
+      setTimeout(() => {
+        chrome.scripting.executeScript({
+          target: { tabId },
+          files: ['content.js']
+        }).catch(() => {
+          // Silently ignore injection failures
+        });
+      }, 500);
+    }
   }
 });

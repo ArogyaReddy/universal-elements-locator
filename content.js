@@ -2,6 +2,50 @@
 // Content script - Enhanced with visibility filtering
 console.log('Universal Element Locator: Content script starting...');
 
+// Enhanced helper function to recursively traverse Shadow DOM
+function getAllElementsIncludingShadowDOM(root = document, includeHidden = false) {
+  const allElements = [];
+  
+  function traverse(node, isShadowRoot = false) {
+    // If it's an element, add it to our list
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      allElements.push({
+        element: node,
+        isShadowDOM: isShadowRoot,
+        shadowHost: isShadowRoot ? node.getRootNode().host : null
+      });
+    }
+    
+    // Traverse children
+    if (node.childNodes) {
+      for (const child of node.childNodes) {
+        traverse(child, isShadowRoot);
+      }
+    }
+    
+    // If this element has a shadow root, traverse it too
+    if (node.nodeType === Node.ELEMENT_NODE && node.shadowRoot) {
+      console.log('🔍 Content: Found Shadow DOM on element:', node.tagName, node.id || node.className);
+      traverse(node.shadowRoot, true);
+    }
+    
+    // Also check for closed shadow roots using common patterns
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      // Some frameworks store shadow root references
+      const possibleShadowKeys = ['_shadowRoot', '__shadowRoot', 'shadowRoot'];
+      for (const key of possibleShadowKeys) {
+        if (node[key] && typeof node[key] === 'object' && node[key].nodeType) {
+          console.log('🔍 Content: Found closed Shadow DOM via', key, 'on element:', node.tagName);
+          traverse(node[key], true);
+        }
+      }
+    }
+  }
+  
+  traverse(root);
+  return allElements;
+}
+
 // Enhanced helper function to check if element is truly visible
 function isElementVisible(element) {
   try {
@@ -219,6 +263,43 @@ function clearAllHighlighting() {
   window.highlightedElements = [];
 }
 
+// Alias for consistency with new message handler
+function clearHighlights() {
+  clearAllHighlighting();
+}
+
+// Function to find elements including those in Shadow DOM
+function findElementBySelectorIncludingShadowDOM(selector) {
+  console.log('🔍 Searching for element with selector:', selector);
+  
+  // First try standard document query
+  let element = document.querySelector(selector);
+  if (element) {
+    console.log('✅ Found element in main document');
+    return element;
+  }
+  
+  // If not found, search in Shadow DOM trees
+  const allElements = getAllElementsIncludingShadowDOM(document);
+  for (const el of allElements) {
+    if (el.shadowRoot) {
+      try {
+        element = el.shadowRoot.querySelector(selector);
+        if (element) {
+          console.log('✅ Found element in Shadow DOM of:', el.tagName);
+          return element;
+        }
+      } catch (e) {
+        // Ignore errors from closed shadow roots
+        console.log('⚠️ Could not search in closed Shadow DOM');
+      }
+    }
+  }
+  
+  console.log('❌ Element not found anywhere');
+  return null;
+}
+
 // Simple initialization
 if (!window.universalLocatorInjected) {
   window.universalLocatorInjected = true;
@@ -245,25 +326,43 @@ if (!window.universalLocatorInjected) {
       case 'scanPageWithHighlighting':
         try {
           console.log('🔍 Content: Starting visible elements scan...');
+          console.log('🔍 Content: Document ready state:', document.readyState);
+          console.log('🔍 Content: DOM loaded:', document.body ? 'Yes' : 'No');
+          
+          if (!document.body) {
+            throw new Error('Page not fully loaded - DOM body not available');
+          }
+          
           const scanOptions = request.options || {};
           const shouldHighlight = request.action === 'scanPageWithHighlighting' && scanOptions.highlight !== false;
           
           // Clear any existing highlighting first
           clearAllHighlighting();
           
-          const elements = document.querySelectorAll('*');
+          // Use enhanced element collection that includes Shadow DOM
+          const allElementsData = getAllElementsIncludingShadowDOM(document, scanOptions.includeHidden);
           const results = [];
           let totalChecked = 0;
           let visibleFound = 0;
           let skippedByTag = 0;
           let skippedByVisibility = 0;
+          let shadowDOMFound = 0;
           
-          console.log(`🔍 Content: Found ${elements.length} total elements to check`);
+          console.log(`🔍 Content: Found ${allElementsData.length} total elements to check (including Shadow DOM)`);
           console.log(`🔍 Content: Highlighting enabled: ${shouldHighlight}`);
           
           // Scan for visible elements only
-          for (let i = 0; i < elements.length && results.length < 200; i++) {
-            const el = elements[i];
+          for (let i = 0; i < allElementsData.length && results.length < 200; i++) {
+            const elementInfo = allElementsData[i];
+            const el = elementInfo.element;
+            const isShadowElement = elementInfo.isShadowDOM;
+            
+            totalChecked++;
+            
+            // Track Shadow DOM elements found
+            if (isShadowElement) {
+              shadowDOMFound++;
+            }
             totalChecked++;
             
             // Skip script/style elements
@@ -292,7 +391,12 @@ if (!window.universalLocatorInjected) {
               tagName: el.tagName.toLowerCase(),
               text: getCleanText(el),
               confidence: Math.random() * 0.4 + 0.6,
-              isShadowDOM: false,
+              isShadowDOM: isShadowElement,
+              shadowHost: isShadowElement && elementInfo.shadowHost ? {
+                tagName: elementInfo.shadowHost.tagName.toLowerCase(),
+                id: elementInfo.shadowHost.id || null,
+                className: elementInfo.shadowHost.className || null
+              } : null,
               position: {
                 x: Math.round(rect.left + window.scrollX),
                 y: Math.round(rect.top + window.scrollY),
@@ -339,80 +443,189 @@ if (!window.universalLocatorInjected) {
               }
             };
 
-            // Enhanced locator generation
-            // 1. ID locators (highest priority)
+            // Enhanced locator generation with uniqueness detection
+            // 1. ID locators (highest priority) - Enhanced with uniqueness verification
             if (el.id) {
+              const baseSelector = `#${el.id}`;
+              const selector = baseSelector;
+              const isUnique = !isShadowElement && isSelectorUnique(baseSelector);
+              
               elementData.locators.primary.push({
                 type: 'id',
-                selector: `#${el.id}`,
-                value: el.id
+                selector: selector,
+                value: el.id,
+                shadowDOM: isShadowElement,
+                isUnique: isUnique,
+                uniquenessLevel: isUnique ? 'unique' : 'duplicate-id'
               });
+              
+              // If ID is not unique (should be rare but happens), add contextual selectors
+              if (!isUnique || isShadowElement) {
+                const uniqueSelectors = generateUniqueSelector(el, baseSelector);
+                uniqueSelectors.slice(1).slice(0, 3).forEach((uniqueSelector, index) => {
+                  elementData.locators.primary.push({
+                    type: `id-contextual-${index + 1}`,
+                    selector: uniqueSelector,
+                    value: el.id,
+                    shadowDOM: isShadowElement,
+                    isUnique: !isShadowElement && isSelectorUnique(uniqueSelector.replace('/* Shadow DOM */ ', '')),
+                    uniquenessLevel: 'contextual-id',
+                    baseAttribute: 'id'
+                  });
+                });
+              }
             }
 
-            // 2. Data attributes (high priority for testing)
+            // 2. Data attributes (high priority for testing) - Enhanced with uniqueness
             for (const attr of el.attributes) {
               if (attr.name.startsWith('data-')) {
+                const baseSelector = `[${attr.name}="${attr.value}"]`;
+                const basicSelector = baseSelector;
+                
+                // Check if the basic selector is unique
+                const isUnique = !isShadowElement && isSelectorUnique(baseSelector);
+                
+                // Always add the basic selector
                 elementData.locators.primary.push({
                   type: attr.name,
-                  selector: `[${attr.name}="${attr.value}"]`,
-                  value: attr.value
+                  selector: basicSelector,
+                  value: attr.value,
+                  shadowDOM: isShadowElement,
+                  isUnique: isUnique,
+                  uniquenessLevel: isUnique ? 'unique' : 'non-unique'
                 });
+                
+                // If not unique, generate additional contextual selectors
+                if (!isUnique || isShadowElement) {
+                  const uniqueSelectors = generateUniqueSelector(el, baseSelector);
+                  uniqueSelectors.slice(1).forEach((uniqueSelector, index) => {
+                    elementData.locators.primary.push({
+                      type: `${attr.name}-contextual-${index + 1}`,
+                      selector: uniqueSelector,
+                      value: attr.value,
+                      shadowDOM: isShadowElement,
+                      isUnique: !isShadowElement && isSelectorUnique(uniqueSelector),
+                      uniquenessLevel: 'contextual',
+                      baseAttribute: attr.name,
+                      contextType: index === 0 ? 'parent-id' : 
+                                   index === 1 ? 'parent-class' :
+                                   index === 2 ? 'parent-tag' :
+                                   index === 3 ? 'nth-child' :
+                                   index === 4 ? 'grandparent' :
+                                   'table-row' 
+                    });
+                  });
+                }
               }
             }
 
             // 3. Name attribute (important for forms)
             if (el.name) {
+              const selector = `[name="${el.name}"]`;
               elementData.locators.primary.push({
                 type: 'name',
-                selector: `[name="${el.name}"]`,
-                value: el.name
+                selector: selector,
+                value: el.name,
+                shadowDOM: isShadowElement
               });
             }
 
             // 4. Aria labels and roles (accessibility)
             if (el.getAttribute('aria-label')) {
+              const selector = `[aria-label="${el.getAttribute('aria-label')}"]`;
               elementData.locators.secondary.push({
                 type: 'aria-label',
-                selector: `[aria-label="${el.getAttribute('aria-label')}"]`,
-                value: el.getAttribute('aria-label')
+                selector: selector,
+                value: el.getAttribute('aria-label'),
+                shadowDOM: isShadowElement
               });
             }
 
             if (el.getAttribute('role')) {
+              const selector = `[role="${el.getAttribute('role')}"]`;
               elementData.locators.secondary.push({
                 type: 'role',
-                selector: `[role="${el.getAttribute('role')}"]`,
-                value: el.getAttribute('role')
+                selector: selector,
+                value: el.getAttribute('role'),
+                shadowDOM: isShadowElement
               });
             }
 
-            // 5. Class names (medium priority)
+            // 5. Class names (medium priority) - Enhanced with uniqueness detection
             if (el.className && typeof el.className === 'string') {
               const classes = el.className.trim().split(/\s+/).filter(c => c);
               if (classes.length > 0) {
+                const combinedSelector = `.${classes.join('.')}`;
+                const selector = combinedSelector;
+                const isUnique = !isShadowElement && isSelectorUnique(combinedSelector);
+                
                 elementData.locators.secondary.push({
                   type: 'class',
-                  selector: `.${classes.join('.')}`,
-                  value: classes.join(' ')
+                  selector: selector,
+                  value: classes.join(' '),
+                  shadowDOM: isShadowElement,
+                  isUnique: isUnique,
+                  uniquenessLevel: isUnique ? 'unique' : 'non-unique'
                 });
                 
-                // Also add individual classes as separate locators
-                classes.forEach(className => {
+                // If combined classes are not unique, try contextual selectors
+                if (!isUnique || isShadowElement) {
+                  const uniqueSelectors = generateUniqueSelector(el, combinedSelector);
+                  uniqueSelectors.slice(1).slice(0, 2).forEach((uniqueSelector, index) => {
+                    elementData.locators.secondary.push({
+                      type: `class-contextual-${index + 1}`,
+                      selector: uniqueSelector,
+                      value: classes.join(' '),
+                      shadowDOM: isShadowElement,
+                      isUnique: !isShadowElement && isSelectorUnique(uniqueSelector),
+                      uniquenessLevel: 'contextual-class'
+                    });
+                  });
+                }
+                
+                // Also add individual classes as separate locators with uniqueness check
+                classes.forEach((className, classIndex) => {
+                  const singleSelector = `.${className}`;
+                  const selector = singleSelector;
+                  const isClassUnique = !isShadowElement && isSelectorUnique(singleSelector);
+                  
                   elementData.locators.secondary.push({
                     type: 'single-class',
-                    selector: `.${className}`,
-                    value: className
+                    selector: selector,
+                    value: className,
+                    shadowDOM: isShadowElement,
+                    isUnique: isClassUnique,
+                    uniquenessLevel: isClassUnique ? 'unique' : 'non-unique',
+                    classIndex: classIndex
                   });
+                  
+                  // If single class is not unique, add contextual version
+                  if (!isClassUnique && classIndex === 0) { // Only for first class to avoid too many locators
+                    const uniqueSelectors = generateUniqueSelector(el, singleSelector);
+                    const bestContextual = uniqueSelectors.slice(1)[0]; // Take the first contextual selector
+                    if (bestContextual) {
+                      elementData.locators.secondary.push({
+                        type: 'single-class-contextual',
+                        selector: bestContextual,
+                        value: className,
+                        shadowDOM: isShadowElement,
+                        isUnique: !isShadowElement && isSelectorUnique(bestContextual),
+                        uniquenessLevel: 'contextual-single-class'
+                      });
+                    }
+                  }
                 });
               }
             }
 
             // 6. Type attribute (for inputs)
             if (el.type) {
+              const selector = `[type="${el.type}"]`;
               elementData.locators.secondary.push({
                 type: 'type',
-                selector: `[type="${el.type}"]`,
-                value: el.type
+                selector: selector,
+                value: el.type,
+                shadowDOM: isShadowElement
               });
             }
 
@@ -473,19 +686,38 @@ if (!window.universalLocatorInjected) {
           }
           
           console.log(`🔍 Content: Scan complete! Checked ${totalChecked} elements, found ${visibleFound} visible, captured ${results.length}`);
+          console.log(`🔍 Content: Shadow DOM found: ${shadowDOMFound} elements`);
           console.log(`🔍 Content: Filtering stats - Skipped by tag: ${skippedByTag}, Skipped by visibility: ${skippedByVisibility}`);
+
+          // Validate results quality
+          if (results.length === 0) {
+            console.warn('🔍 Content: No elements found - this might indicate an issue');
+            throw new Error(`No visible elements found on page. Checked ${totalChecked} elements, ${skippedByVisibility} were not visible.`);
+          }
+          
+          if (results.length < 5 && visibleFound > 10) {
+            console.warn('🔍 Content: Very few results captured compared to visible elements found');
+          }
 
           const stats = {
             totalElements: results.length,
             primaryElements: results.filter(el => el.locators.primary.length > 0).length,
             secondaryElements: results.filter(el => el.locators.secondary.length > 0).length,
             shadowElements: results.filter(el => el.isShadowDOM).length,
-            scanDuration: 100
+            scanDuration: 100,
+            debugInfo: {
+              totalChecked,
+              visibleFound,
+              skippedByTag,
+              skippedByVisibility
+            }
           };
 
           sendResponse({ success: true, results, stats });
         } catch (error) {
-          sendResponse({ success: false, error: error.message });
+          console.error('🔍 Content: Scan error:', error);
+          console.error('🔍 Content: Error stack:', error.stack);
+          sendResponse({ success: false, error: error.message, details: error.stack });
         }
         break;
       
@@ -498,6 +730,45 @@ if (!window.universalLocatorInjected) {
         }
         break;
         
+      case 'highlightElement':
+        try {
+          const { selector } = request;
+          if (!selector) {
+            throw new Error('No selector provided for highlighting');
+          }
+          
+          console.log('🎯 Highlighting element with selector:', selector);
+          
+          // Clear previous highlights
+          clearHighlights();
+          
+          // Try to find and highlight the element
+          const element = findElementBySelectorIncludingShadowDOM(selector);
+          if (element) {
+            highlightElement(element);
+            console.log('✅ Element highlighted successfully');
+            sendResponse({ success: true, found: true });
+          } else {
+            console.log('❌ Element not found for highlighting');
+            sendResponse({ success: true, found: false });
+          }
+        } catch (error) {
+          console.error('Error highlighting element:', error);
+          sendResponse({ success: false, error: error.message });
+        }
+        break;
+      
+      case 'clearHighlights':
+        try {
+          clearHighlights();
+          console.log('✅ Highlights cleared');
+          sendResponse({ success: true });
+        } catch (error) {
+          console.error('Error clearing highlights:', error);
+          sendResponse({ success: false, error: error.message });
+        }
+        break;
+        
       default:
         sendResponse({ success: false, error: 'Unknown action' });
     }
@@ -506,5 +777,101 @@ if (!window.universalLocatorInjected) {
   });
   
   console.log('Universal Element Locator: Content script ready');
+  }
+}
+
+// Helper function to generate unique contextual selectors
+function generateUniqueSelector(element, baseSelector) {
+  const selectors = [];
+  const prefix = '';
+  
+  // Start with the base selector
+  selectors.push(`${prefix}${baseSelector}`);
+  
+  // Try to make it unique by adding parent context
+  let parent = element.parentElement;
+  if (parent) {
+    // Parent with ID
+    if (parent.id) {
+      selectors.push(`${prefix}#${parent.id} ${baseSelector}`);
+    }
+    
+    // Parent with unique class
+    if (parent.className) {
+      const parentClasses = parent.className.trim().split(/\s+/).filter(c => c);
+      if (parentClasses.length > 0) {
+        selectors.push(`${prefix}.${parentClasses[0]} ${baseSelector}`);
+      }
+    }
+    
+    // Parent tag name context
+    selectors.push(`${prefix}${parent.tagName.toLowerCase()} ${baseSelector}`);
+    
+    // Sibling index context (nth-child)
+    const siblings = Array.from(parent.children);
+    const index = siblings.indexOf(element);
+    if (index >= 0) {
+      selectors.push(`${prefix}${baseSelector}:nth-child(${index + 1})`);
+    }
+    
+    // Grandparent context for deeply nested elements
+    const grandparent = parent.parentElement;
+    if (grandparent && grandparent.id) {
+      selectors.push(`${prefix}#${grandparent.id} ${parent.tagName.toLowerCase()} ${baseSelector}`);
+    }
+  }
+  
+  // Table context (for table cells, rows)
+  const table = element.closest('table');
+  if (table) {
+    const row = element.closest('tr');
+    if (row) {
+      const rowIndex = Array.from(table.querySelectorAll('tr')).indexOf(row);
+      const cellIndex = Array.from(row.children).indexOf(element);
+      if (rowIndex >= 0 && cellIndex >= 0) {
+        selectors.push(`${prefix}table tr:nth-child(${rowIndex + 1}) ${baseSelector}`);
+        selectors.push(`${prefix}table tr:nth-child(${rowIndex + 1}) td:nth-child(${cellIndex + 1}) ${baseSelector}`);
+      }
+    }
+  }
+  
+  // Form context
+  const form = element.closest('form');
+  if (form) {
+    if (form.id) {
+      selectors.push(`${prefix}#${form.id} ${baseSelector}`);
+    } else if (form.className) {
+      const formClasses = form.className.trim().split(/\s+/).filter(c => c);
+      if (formClasses.length > 0) {
+        selectors.push(`${prefix}.${formClasses[0]} ${baseSelector}`);
+      }
+    }
+  }
+  
+  // List context (for list items)
+  const list = element.closest('ul, ol');
+  if (list) {
+    const listItems = Array.from(list.children);
+    const itemIndex = listItems.indexOf(element.closest('li'));
+    if (itemIndex >= 0) {
+      selectors.push(`${prefix}${list.tagName.toLowerCase()} li:nth-child(${itemIndex + 1}) ${baseSelector}`);
+    }
+  }
+  
+  return selectors;
+}
+
+// Helper function to check if a selector is unique on the page
+function isSelectorUnique(selector, shadowDOM = false) {
+  try {
+    if (shadowDOM) {
+      // For shadow DOM, we'd need more complex checking
+      // For now, assume it might not be unique
+      return false;
+    }
+    const elements = document.querySelectorAll(selector);
+    return elements.length === 1;
+  } catch (e) {
+    return false;
   }
 }
