@@ -6,6 +6,7 @@ let scanResults = null;
 let filteredElements = [];
 let currentPage = 1;
 const itemsPerPage = 50;
+let viewAllMode = false;
 
 // Initialize page
 document.addEventListener('DOMContentLoaded', async function() {
@@ -110,6 +111,7 @@ function displayStatistics() {
 
 function displayElements() {
     console.log('🔍 Debug: displayElements() called with filteredElements.length:', filteredElements.length);
+    console.log('🔍 Debug: viewAllMode:', viewAllMode);
     
     const container = document.getElementById('elementsContainer');
     console.log('🔍 Debug: elementsContainer found:', !!container);
@@ -122,20 +124,58 @@ function displayElements() {
 
     console.log('✅ Debug: Rendering', filteredElements.length, 'elements');
 
-    // Calculate pagination
-    const totalPages = Math.ceil(filteredElements.length / itemsPerPage);
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    const pageElements = filteredElements.slice(startIndex, endIndex);
+    // Determine elements to show based on view mode
+    let elementsToShow;
+    let controlsHtml;
+    
+    if (viewAllMode) {
+        // Show all elements
+        elementsToShow = [...filteredElements]; // Create a copy to avoid reference issues
+        console.log('🔍 Debug: View All Mode - elementsToShow length:', elementsToShow.length);
+        console.log('🔍 Debug: View All Mode - first element:', elementsToShow[0] ? 'exists' : 'missing');
+        controlsHtml = `
+            <div class="results-summary">
+                <span>Showing all ${filteredElements.length} elements</span>
+            </div>
+        `;
+    } else {
+        // Show paginated elements
+        const totalPages = Math.ceil(filteredElements.length / itemsPerPage);
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        const endIndex = startIndex + itemsPerPage;
+        elementsToShow = filteredElements.slice(startIndex, endIndex);
+        
+        controlsHtml = `
+            <div class="results-summary">
+                <span>Showing ${elementsToShow.length} of ${filteredElements.length} elements (Page ${currentPage} of ${totalPages})</span>
+            </div>
+        `;
+    }
 
-    console.log('🔍 Debug: Pagination info:', { totalPages, startIndex, endIndex, pageElementsLength: pageElements.length });
+    console.log('🔍 Debug: Elements to show:', elementsToShow.length);
 
-    // Create simplified table controls (no longer needed since controls moved to main section)
-    const controlsHtml = `
-        <div class="results-summary">
-            <span>Showing ${pageElements.length} of ${filteredElements.length} elements (Page ${currentPage} of ${totalPages})</span>
-        </div>
-    `;
+    // Generate table body content with error handling for each row
+    let tableBodyContent = '';
+    for (let i = 0; i < elementsToShow.length; i++) {
+        const element = elementsToShow[i];
+        const actualIndex = viewAllMode ? i : ((currentPage - 1) * itemsPerPage) + i;
+        
+        try {
+            console.log(`🔍 Debug: Creating row ${i + 1}/${elementsToShow.length} for element`, element ? 'exists' : 'missing');
+            const rowHTML = createElementRow(element, actualIndex);
+            if (rowHTML && rowHTML.trim().length > 0) {
+                tableBodyContent += rowHTML;
+            } else {
+                console.warn(`⚠️ Warning: Empty row HTML for element at index ${i}`);
+                tableBodyContent += `<tr><td colspan="12">Empty row for element ${i + 1}</td></tr>`;
+            }
+        } catch (error) {
+            console.error(`❌ Error creating row for element ${i}:`, error);
+            tableBodyContent += `<tr><td colspan="12">Error rendering element ${i + 1}: ${error.message}</td></tr>`;
+        }
+    }
+
+    console.log('🔍 Debug: Table body content length:', tableBodyContent.length);
 
     const tableContent = `
         <div class="table-wrapper">
@@ -157,13 +197,14 @@ function displayElements() {
                     </tr>
                 </thead>
                 <tbody>
-                    ${pageElements.map((element, index) => createElementRow(element, startIndex + index)).join('')}
+                    ${tableBodyContent}
                 </tbody>
             </table>
         </div>
     `;
 
-    const pagination = createPagination(totalPages);
+    // Only show pagination if not in view all mode
+    const pagination = createPagination(Math.ceil(filteredElements.length / itemsPerPage));
     const finalHTML = controlsHtml + tableContent + pagination;
     
     console.log('🔍 Debug: Setting container innerHTML, length:', finalHTML.length);
@@ -405,7 +446,18 @@ function showCopyNotification(message, isError = false) {
 }
 
 function createPagination(totalPages) {
-    if (totalPages <= 1) return '';
+    // If we're in view all mode, always show the back to pagination controls
+    if (viewAllMode) {
+        return createViewAllControls();
+    }
+    
+    if (totalPages <= 1) {
+        return `
+            <div class="view-all-section">
+                <div class="view-mode-info">📊 All ${filteredElements.length} elements displayed</div>
+            </div>
+        `;
+    }
 
     const pages = [];
     for (let i = 1; i <= totalPages; i++) {
@@ -416,6 +468,7 @@ function createPagination(totalPages) {
         `);
     }
 
+    // Integrated pagination with view all button inline
     return `
         <div class="pagination">
             <button data-page="${currentPage - 1}" ${currentPage === 1 ? 'disabled' : ''}>
@@ -425,6 +478,25 @@ function createPagination(totalPages) {
             <button data-page="${currentPage + 1}" ${currentPage === totalPages ? 'disabled' : ''}>
                 Next →
             </button>
+            <button id="viewAllBtn" class="view-all-btn pagination-inline">
+                📋 View All ${filteredElements.length}
+            </button>
+        </div>
+        <div class="view-all-section">
+            <div class="view-mode-info">� Page ${currentPage} of ${totalPages} (${filteredElements.length} total elements)</div>
+        </div>
+    `;
+}
+
+function createViewAllControls() {
+    return `
+        <div class="pagination">
+            <button id="paginationModeBtn" class="pagination-mode-btn">
+                📑 Back to Pagination
+            </button>
+        </div>
+        <div class="view-all-section">
+            <div class="view-mode-info">📊 Viewing all ${filteredElements.length} elements</div>
         </div>
     `;
 }
@@ -502,6 +574,21 @@ function setupEventListeners() {
 
     // Table event listeners (for dynamically added elements like pagination and copy buttons)
     document.getElementById('elementsContainer').addEventListener('click', function(event) {
+
+        // View mode button event delegation
+        if (event.target.id === 'viewAllBtn') {
+            viewAllMode = true;
+            currentPage = 1; // Reset to page 1 when switching modes
+            displayElements();
+            return;
+        }
+        
+        if (event.target.id === 'paginationModeBtn') {
+            viewAllMode = false;
+            currentPage = 1; // Reset to page 1 when switching modes
+            displayElements();
+            return;
+        }
 
         // Pagination event delegation
         if (event.target.tagName === 'BUTTON' && event.target.hasAttribute('data-page')) {

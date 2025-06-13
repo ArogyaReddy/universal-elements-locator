@@ -175,10 +175,8 @@ function getRelevantStyles(element) {
 }
 
 // Highlighting functionality
-let highlightedElements = [];
-
 function highlightElement(element) {
-  if (!element || highlightedElements.includes(element)) return;
+  if (!element || window.highlightedElements.includes(element)) return;
   
   // Store original styles
   const originalOutline = element.style.outline;
@@ -197,7 +195,7 @@ function highlightElement(element) {
     zIndex: originalZIndex
   };
   
-  highlightedElements.push(element);
+  window.highlightedElements.push(element);
   
   // Add a gentle flash effect
   element.style.transition = 'all 0.3s ease';
@@ -209,7 +207,7 @@ function highlightElement(element) {
 }
 
 function clearAllHighlighting() {
-  highlightedElements.forEach(element => {
+  window.highlightedElements.forEach(element => {
     if (element && element._originalStyles) {
       element.style.outline = element._originalStyles.outline;
       element.style.boxShadow = element._originalStyles.boxShadow;
@@ -218,15 +216,24 @@ function clearAllHighlighting() {
       delete element._originalStyles;
     }
   });
-  highlightedElements = [];
+  window.highlightedElements = [];
 }
 
 // Simple initialization
 if (!window.universalLocatorInjected) {
   window.universalLocatorInjected = true;
   
-  // Basic message handling
-  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  // Highlighting functionality - only declare if not already declared
+  if (!window.highlightedElements) {
+    window.highlightedElements = [];
+  }
+  
+  // Only add event listener if not already added
+  if (!window.universalLocatorListenerAdded) {
+    window.universalLocatorListenerAdded = true;
+    
+    // Basic message handling
+    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     console.log('Message received:', request.action);
     
     switch (request.action) {
@@ -499,4 +506,5 @@ if (!window.universalLocatorInjected) {
   });
   
   console.log('Universal Element Locator: Content script ready');
+  }
 }
