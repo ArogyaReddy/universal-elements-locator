@@ -396,39 +396,58 @@ function clearHighlights() {
 
 // Function to find ALL elements including those in Shadow DOM (matches browser behavior)
 function findAllElementsBySelectorIncludingShadowDOM(selector) {
-  console.log('🔍 Searching for ALL elements with selector:', selector);
+  console.log('🔍 FIND ELEMENTS - Searching for ALL elements with selector:', selector);
   const foundElements = [];
   
   // First try standard document query for all elements
   try {
+    console.log('🔍 FIND ELEMENTS - Trying document.querySelectorAll...');
     const elements = document.querySelectorAll(selector);
     if (elements.length > 0) {
       foundElements.push(...Array.from(elements));
-      console.log(`✅ Found ${elements.length} elements in main document`);
+      console.log(`✅ FIND ELEMENTS - Found ${elements.length} elements in main document`);
+      
+      // Log details of found elements
+      Array.from(elements).forEach((el, index) => {
+        console.log(`  Main document element ${index + 1}:`, {
+          tag: el.tagName,
+          id: el.id || 'no-id',
+          classes: el.className || 'no-classes',
+          text: (el.textContent || '').trim().substring(0, 30)
+        });
+      });
+    } else {
+      console.log('⚠️ FIND ELEMENTS - No elements found in main document');
     }
   } catch (e) {
-    console.error('❌ Invalid selector:', selector, e);
+    console.error('❌ FIND ELEMENTS - Invalid selector for main document:', selector, e);
     return [];
   }
   
   // Search in Shadow DOM trees
+  console.log('🔍 FIND ELEMENTS - Searching in Shadow DOM trees...');
   const allElements = getAllElementsIncludingShadowDOM(document);
+  let shadowSearchCount = 0;
+  
   for (const el of allElements) {
     if (el.element && el.element.shadowRoot) {
+      shadowSearchCount++;
       try {
         const shadowElements = el.element.shadowRoot.querySelectorAll(selector);
         if (shadowElements.length > 0) {
           foundElements.push(...Array.from(shadowElements));
-          console.log(`✅ Found ${shadowElements.length} elements in Shadow DOM of:`, el.element.tagName);
+          console.log(`✅ FIND ELEMENTS - Found ${shadowElements.length} elements in Shadow DOM of:`, el.element.tagName);
         }
       } catch (e) {
         // Ignore errors from closed shadow roots or invalid selectors
-        console.log('⚠️ Could not search in Shadow DOM:', e.message);
+        console.log('⚠️ FIND ELEMENTS - Could not search in Shadow DOM:', e.message);
       }
     }
   }
   
-  console.log(`🎯 Total elements found: ${foundElements.length}`);
+  console.log(`🔍 FIND ELEMENTS - Searched ${shadowSearchCount} Shadow DOM trees`);
+  console.log(`🎯 FIND ELEMENTS - TOTAL elements found: ${foundElements.length}`);
+  
   return foundElements;
 }
 
@@ -442,49 +461,61 @@ function findElementBySelectorIncludingShadowDOM(selector) {
 // Function to highlight all matching elements
 function highlightAllElements(elements) {
   if (!elements || elements.length === 0) {
-    console.log('❌ No elements to highlight');
+    console.log('❌ HIGHLIGHT - No elements to highlight');
     return false;
   }
   
-  console.log(`🎯 Highlighting ${elements.length} elements`);
+  console.log(`🎯 HIGHLIGHT - Starting to highlight ${elements.length} elements`);
   
   let successCount = 0;
   elements.forEach((element, index) => {
     try {
+      console.log(`🎯 HIGHLIGHT - Processing element ${index + 1}/${elements.length}:`, {
+        tag: element.tagName,
+        id: element.id || 'no-id',
+        classes: element.className || 'no-classes'
+      });
+      
       // For the first element, clear highlights and scroll into view
       // For subsequent elements, skip clearing and scrolling
       const skipClearAndScroll = index > 0;
       highlightElement(element, skipClearAndScroll);
       successCount++;
-      console.log(`✅ Highlighted element ${index + 1}/${elements.length}:`, element.tagName, element.id || element.className);
+      console.log(`✅ HIGHLIGHT - Successfully highlighted element ${index + 1}/${elements.length}`);
     } catch (error) {
-      console.error(`❌ Failed to highlight element ${index + 1}:`, error);
+      console.error(`❌ HIGHLIGHT - Failed to highlight element ${index + 1}:`, error);
     }
   });
   
-  console.log(`🎯 Successfully highlighted ${successCount}/${elements.length} elements`);
+  console.log(`🎯 HIGHLIGHT - Successfully highlighted ${successCount}/${elements.length} elements`);
   return successCount > 0;
 }
 
 // Simple initialization
 if (!window.universalLocatorInjected) {
   window.universalLocatorInjected = true;
+  console.log('🚀 CONTENT SCRIPT: Universal Element Locator initializing...');
+  console.log('🚀 CONTENT SCRIPT: Page URL:', window.location.href);
+  console.log('🚀 CONTENT SCRIPT: Document ready state:', document.readyState);
   
   // Highlighting functionality - only declare if not already declared
   if (!window.highlightedElements) {
     window.highlightedElements = [];
+    console.log('🚀 CONTENT SCRIPT: highlightedElements array initialized');
   }
   
   // Only add event listener if not already added
   if (!window.universalLocatorListenerAdded) {
     window.universalLocatorListenerAdded = true;
+    console.log('🚀 CONTENT SCRIPT: Adding message listener...');
     
     // Basic message handling
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    console.log('Message received:', request.action);
+    console.log('📥 CONTENT SCRIPT: Message received:', request.action, request);
     
     switch (request.action) {
       case 'ping':
+        console.log('🏓 CONTENT SCRIPT: Ping received, sending pong');
         sendResponse({ success: true });
         break;
         
@@ -949,11 +980,30 @@ if (!window.universalLocatorInjected) {
             throw new Error('No selector provided for highlighting');
           }
           
-          console.log('🎯 Highlighting ALL elements with selector:', selector);
+          console.log('🎯 HIGHLIGHT REQUEST RECEIVED - Selector:', selector);
+          console.log('🎯 Page URL:', window.location.href);
+          console.log('🎯 Document ready state:', document.readyState);
+          
+          // Clear previous highlights first
+          clearAllHighlighting();
           
           // Find all matching elements (like browser dev tools)
+          console.log('🔍 Searching for elements with selector:', selector);
           const elements = findAllElementsBySelectorIncludingShadowDOM(selector);
+          
+          console.log(`🔍 Found ${elements.length} elements for selector: ${selector}`);
+          
           if (elements.length > 0) {
+            console.log('🎯 Elements found, applying highlighting...');
+            elements.forEach((el, index) => {
+              console.log(`  Element ${index + 1}:`, {
+                tag: el.tagName,
+                id: el.id || 'no-id',
+                classes: el.className || 'no-classes',
+                text: (el.textContent || '').trim().substring(0, 50)
+              });
+            });
+            
             const success = highlightAllElements(elements);
             if (success) {
               console.log(`✅ Successfully highlighted ${elements.length} elements`);
@@ -968,10 +1018,34 @@ if (!window.universalLocatorInjected) {
             }
           } else {
             console.log('❌ No elements found for highlighting');
+            
+            // Additional debugging - try basic querySelector
+            try {
+              const basicElements = document.querySelectorAll(selector);
+              console.log(`🔍 Basic querySelectorAll found: ${basicElements.length} elements`);
+              
+              if (basicElements.length > 0) {
+                console.log('🎯 Basic selector works, highlighting with fallback method...');
+                const fallbackSuccess = highlightAllElements(Array.from(basicElements));
+                if (fallbackSuccess) {
+                  sendResponse({ 
+                    success: true, 
+                    found: true, 
+                    count: basicElements.length,
+                    method: 'fallback' 
+                  });
+                  return;
+                }
+              }
+            } catch (fallbackError) {
+              console.error('❌ Fallback selector also failed:', fallbackError);
+            }
+            
             sendResponse({ success: true, found: false, count: 0 });
           }
         } catch (error) {
-          console.error('Error highlighting elements:', error);
+          console.error('❌ Error in highlightElement handler:', error);
+          console.error('❌ Error stack:', error.stack);
           sendResponse({ success: false, error: error.message });
         }
         break;
@@ -1016,7 +1090,9 @@ if (!window.universalLocatorInjected) {
     return true; // Keep channel open
   });
   
-  console.log('Universal Element Locator: Content script ready');
+  console.log('🚀 CONTENT SCRIPT: Universal Element Locator initialization complete!');
+  console.log('🚀 CONTENT SCRIPT: Message listener added, ready to receive messages');
+  console.log('🚀 CONTENT SCRIPT: Available functions: highlightElement, scanPage, clearHighlighting');
   }
 }
 

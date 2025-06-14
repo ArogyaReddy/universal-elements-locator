@@ -594,17 +594,89 @@ document.addEventListener('DOMContentLoaded', () => {
           `;
           highlightBtn.textContent = '🎯 Test';
           highlightBtn.onclick = async () => {
-            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-            if (tab) {
-              await chrome.tabs.sendMessage(tab.id, {
+            try {
+              console.log('🎯 POPUP: Attempting to highlight:', locator.selector);
+              highlightBtn.textContent = '🔍 Finding...';
+              
+              const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+              if (!tab || !tab.id) {
+                console.error('❌ POPUP: No active tab found');
+                highlightBtn.textContent = '❌ No Tab';
+                setTimeout(() => {
+                  highlightBtn.textContent = '🎯 Test';
+                }, 2000);
+                return;
+              }
+              
+              console.log('📤 POPUP: Sending message to tab:', tab.id, 'selector:', locator.selector);
+              
+              const response = await chrome.tabs.sendMessage(tab.id, {
                 action: 'highlightElement',
                 selector: locator.selector
               });
               
-              highlightBtn.textContent = '✅ Highlighted!';
+              console.log('📥 POPUP: Received response:', response);
+              
+              if (response && response.success) {
+                if (response.found) {
+                  console.log('✅ POPUP: Element highlighted successfully');
+                  highlightBtn.textContent = `✅ Found ${response.count}!`;
+                } else {
+                  console.log('⚠️ POPUP: Element not found');
+                  highlightBtn.textContent = '❌ Not Found';
+                }
+              } else {
+                console.error('❌ POPUP: Failed to highlight:', response?.error);
+                highlightBtn.textContent = '❌ Error';
+              }
+              
               setTimeout(() => {
                 highlightBtn.textContent = '🎯 Test';
-              }, 2000);
+              }, 3000);
+              
+            } catch (error) {
+              console.error('❌ POPUP: Error in highlight:', error);
+              
+              // Check for content script injection issue
+              if (error.message.includes('Could not establish connection') || 
+                  error.message.includes('Receiving end does not exist')) {
+                console.log('🔄 POPUP: Content script not found, attempting injection...');
+                highlightBtn.textContent = '🔄 Injecting...';
+                
+                try {
+                  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                  await chrome.scripting.executeScript({
+                    target: { tabId: tab.id },
+                    files: ['content.js']
+                  });
+                  
+                  // Wait for injection
+                  await new Promise(resolve => setTimeout(resolve, 200));
+                  
+                  // Retry highlighting
+                  const retryResponse = await chrome.tabs.sendMessage(tab.id, {
+                    action: 'highlightElement',
+                    selector: locator.selector
+                  });
+                  
+                  if (retryResponse && retryResponse.success && retryResponse.found) {
+                    console.log('✅ POPUP: Highlighted after injection');
+                    highlightBtn.textContent = `✅ Found ${retryResponse.count}!`;
+                  } else {
+                    console.log('❌ POPUP: Still not found after injection');
+                    highlightBtn.textContent = '❌ Not Found';
+                  }
+                } catch (retryError) {
+                  console.error('❌ POPUP: Retry failed:', retryError);
+                  highlightBtn.textContent = '❌ Failed';
+                }
+              } else {
+                highlightBtn.textContent = '❌ Error';
+              }
+              
+              setTimeout(() => {
+                highlightBtn.textContent = '🎯 Test';
+              }, 3000);
             }
           };
           
@@ -708,7 +780,35 @@ document.addEventListener('DOMContentLoaded', () => {
       if (error.message.includes('Could not establish connection') || 
           error.message.includes('Receiving end does not exist')) {
         
-        setStatus('⚠️ Content script not found - try refreshing the page first');
+        console.log('🔄 POPUP: Manual highlight - injecting content script...');
+        setStatus('🔄 Injecting content script...');
+        
+        try {
+          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+          await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            files: ['content.js']
+          });
+          
+          // Wait for injection
+          await new Promise(resolve => setTimeout(resolve, 200));
+          
+          // Retry highlighting
+          const retryResponse = await chrome.tabs.sendMessage(tab.id, {
+            action: 'highlightElement',
+            selector: selector
+          });
+          
+          if (retryResponse && retryResponse.success && retryResponse.found) {
+            const count = retryResponse.count || 1;
+            setStatus(`✅ ${count} elements highlighted after injection! Check the page.`);
+          } else {
+            setStatus('⚠️ No elements found after injection: ' + selector);
+          }
+        } catch (retryError) {
+          console.error('❌ POPUP: Manual highlight retry failed:', retryError);
+          setStatus('❌ Failed to inject content script and highlight');
+        }
       } else {
         setStatus('❌ Highlight failed: ' + error.message);
       }
