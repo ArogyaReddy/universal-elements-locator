@@ -1115,39 +1115,103 @@ async function highlightElementOnPage(selector) {
     try {
         console.log('🎯 Attempting to highlight element with selector:', selector);
         
+        // Show immediate feedback
+        showNotification('🔍 Searching for element...', 'info');
+        
         // Get the current active tab to send the highlight message
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         
         if (!tab || !tab.id) {
             console.error('❌ No active tab found');
-            showNotification('No active tab found', 'error');
+            showNotification('❌ No active tab found', 'error');
             return;
         }
         
-        // Check if the tab URL matches the scanned page URL
-        if (scanResults && scanResults.url && !tab.url.includes(scanResults.url.split('#')[0])) {
-            console.log('⚠️ Active tab URL does not match scanned page');
-            showNotification('Please switch to the scanned page tab to highlight elements', 'warning');
-            return;
+        console.log('📍 Active tab found:', tab.url);
+        
+        // Check if the tab URL matches the scanned page URL (more flexible matching)
+        if (scanResults && scanResults.url) {
+            const scannedUrl = new URL(scanResults.url).pathname;
+            const currentUrl = new URL(tab.url).pathname;
+            
+            // For file:// URLs, compare the full path; for others, compare hostname + pathname
+            const urlsMatch = tab.url.startsWith('file://') ? 
+                tab.url.split('#')[0] === scanResults.url.split('#')[0] :
+                new URL(tab.url).hostname === new URL(scanResults.url).hostname && 
+                currentUrl === scannedUrl;
+                
+            if (!urlsMatch) {
+                console.log('⚠️ Active tab URL does not match scanned page');
+                console.log('   Current tab:', tab.url);
+                console.log('   Scanned page:', scanResults.url);
+                showNotification('⚠️ Please switch to the scanned page tab to highlight elements', 'warning');
+                return;
+            }
         }
         
         // Send message to content script to highlight the element
-        const response = await chrome.tabs.sendMessage(tab.id, {
-            action: 'highlightElement',
-            selector: selector
-        });
+        console.log('📤 Sending highlight message to tab:', tab.id, 'for selector:', selector);
         
-        if (response && response.success) {
-            if (response.found) {
-                console.log('✅ Element highlighted successfully');
-                showNotification('Element highlighted on page', 'success');
+        try {
+            const response = await chrome.tabs.sendMessage(tab.id, {
+                action: 'highlightElement',
+                selector: selector
+            });
+            
+            console.log('📥 Received response:', response);
+            
+            if (response && response.success) {
+                if (response.found) {
+                    console.log('✅ Element highlighted successfully');
+                    showNotification('🎯 Element highlighted! Switch to the page tab to see it.', 'success');
+                } else {
+                    console.log('⚠️ Element not found for highlighting');
+                    showNotification('⚠️ Element not found on current page', 'warning');
+                }
             } else {
-                console.log('⚠️ Element not found for highlighting');
-                showNotification('Element not found on current page', 'warning');
+                console.error('❌ Failed to highlight element:', response?.error);
+                showNotification('❌ Failed to highlight: ' + (response?.error || 'Unknown error'), 'error');
             }
-        } else {
-            console.error('❌ Failed to highlight element:', response?.error);
-            showNotification('Failed to highlight element', 'error');
+        } catch (messageError) {
+            console.error('❌ Error sending message to content script:', messageError);
+            
+            // Check if it's a content script injection issue
+            if (messageError.message.includes('Could not establish connection') || 
+                messageError.message.includes('Receiving end does not exist')) {
+                
+                console.log('🔄 Content script not found, attempting to inject...');
+                
+                try {
+                    // Try to inject the content script
+                    await chrome.scripting.executeScript({
+                        target: { tabId: tab.id },
+                        files: ['content.js']
+                    });
+                    
+                    // Wait a moment for injection
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    
+                    // Try highlighting again
+                    const retryResponse = await chrome.tabs.sendMessage(tab.id, {
+                        action: 'highlightElement',
+                        selector: selector
+                    });
+                    
+                    if (retryResponse && retryResponse.success && retryResponse.found) {
+                        console.log('✅ Element highlighted successfully after script injection');
+                        showNotification('🎯 Element highlighted! Script injected and element found.', 'success');
+                    } else {
+                        console.log('⚠️ Element not found after script injection');
+                        showNotification('⚠️ Element not found on current page', 'warning');
+                    }
+                    
+                } catch (injectionError) {
+                    console.error('❌ Failed to inject content script:', injectionError);
+                    showNotification('Cannot highlight on this page type', 'error');
+                }
+            } else {
+                showNotification('Communication error with page: ' + messageError.message, 'error');
+            }
         }
         
     } catch (error) {
@@ -1158,46 +1222,64 @@ async function highlightElementOnPage(selector) {
 
 // Function to show notification messages
 function showNotification(message, type = 'info') {
+    console.log('🔔 Showing notification:', message, 'Type:', type);
+    
     // Create notification element if it doesn't exist
     let notification = document.getElementById('notification');
     if (!notification) {
         notification = document.createElement('div');
         notification.id = 'notification';
         notification.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 12px 16px;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 500;
-            z-index: 10000;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-            max-width: 300px;
-            word-wrap: break-word;
+            position: fixed !important;
+            top: 20px !important;
+            right: 20px !important;
+            padding: 16px 20px !important;
+            border-radius: 12px !important;
+            font-size: 16px !important;
+            font-weight: 600 !important;
+            z-index: 99999 !important;
+            opacity: 0 !important;
+            transition: all 0.3s ease !important;
+            max-width: 400px !important;
+            word-wrap: break-word !important;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
+            border: 2px solid transparent !important;
+            pointer-events: auto !important;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
         `;
         document.body.appendChild(notification);
+        console.log('📱 Created new notification element');
     }
     
     // Set styles based on type
     const colors = {
-        success: { bg: '#10b981', text: 'white' },
-        error: { bg: '#ef4444', text: 'white' },
-        warning: { bg: '#f59e0b', text: 'white' },
-        info: { bg: '#3b82f6', text: 'white' }
+        success: { bg: '#10b981', text: 'white', border: '#059669' },
+        error: { bg: '#ef4444', text: 'white', border: '#dc2626' },
+        warning: { bg: '#f59e0b', text: 'white', border: '#d97706' },
+        info: { bg: '#3b82f6', text: 'white', border: '#2563eb' }
     };
     
     const color = colors[type] || colors.info;
-    notification.style.backgroundColor = color.bg;
-    notification.style.color = color.text;
+    notification.style.backgroundColor = color.bg + ' !important';
+    notification.style.color = color.text + ' !important';
+    notification.style.borderColor = color.border + ' !important';
     notification.textContent = message;
     
-    // Show notification
-    notification.style.opacity = '1';
+    // Show notification with animation
+    notification.style.opacity = '1 !important';
+    notification.style.transform = 'translateY(0) scale(1) !important';
     
-    // Hide after 3 seconds
+    console.log('✅ Notification displayed:', message);
+    
+    // For highlighting actions, show longer duration
+    const duration = message.includes('🎯') || message.includes('🔍') ? 6000 : 4000;
+    
+    // Hide after specified duration
     setTimeout(() => {
-        notification.style.opacity = '0';
-    }, 3000);
+        if (notification) {
+            notification.style.opacity = '0 !important';
+            notification.style.transform = 'translateY(-10px) scale(0.95) !important';
+            console.log('🔔 Notification hidden after', duration, 'ms');
+        }
+    }, duration);
 }

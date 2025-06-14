@@ -310,6 +310,85 @@
       border-color: #ff6b35;
       box-shadow: 0 2px 8px rgba(255,107,53,0.3);
     }
+
+    /* Manual Highlight Section Styles */
+    .manual-highlight-section {
+      margin-top: 15px;
+      padding: 12px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .manual-highlight-section h4 {
+      margin: 0 0 10px 0;
+      font-size: 13px;
+      font-weight: 600;
+      color: #00ff88;
+      text-align: center;
+    }
+
+    .input-group {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .selector-input {
+      flex: 1;
+      padding: 8px 10px;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 4px;
+      color: white;
+      font-size: 12px;
+      font-family: 'Courier New', monospace;
+    }
+
+    .selector-input::placeholder {
+      color: rgba(255,255,255,0.6);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    .selector-input:focus {
+      outline: none;
+      border-color: #00ff88;
+      background: rgba(255,255,255,0.15);
+    }
+
+    .highlight-btn {
+      padding: 8px 16px;
+      background: linear-gradient(45deg, #ff6b35, #f7931e);
+      border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 4px;
+      color: white;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .highlight-btn:hover:not(:disabled) {
+      background: linear-gradient(45deg, #ff8555, #ffa33e);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(255, 107, 53, 0.3);
+    }
+
+    .highlight-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .input-helper {
+      text-align: center;
+    }
+
+    .input-helper small {
+      color: rgba(255,255,255,0.7);
+      font-size: 11px;
+    }
   </style>
 </head>
 <body>
@@ -343,6 +422,21 @@
         <button id="highlightElement" class="tool-button">
           ✨ Highlight Element
         </button>
+      </div>
+      
+      <!-- Manual Highlight Section -->
+      <div class="manual-highlight-section">
+        <h4>Manual Highlight</h4>
+        <div class="input-group">
+          <input type="text" id="manualSelector" placeholder="Enter CSS selector (e.g., #signBtn, .button, div[data-test='submit'])" 
+                 class="selector-input">
+          <button id="manualHighlightBtn" class="highlight-btn">
+            🎯 Highlight
+          </button>
+        </div>
+        <div class="input-helper">
+          <small>Paste any CSS selector from results or inspect element</small>
+        </div>
       </div>
     </div>
 

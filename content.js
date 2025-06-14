@@ -7,13 +7,16 @@ function getAllElementsIncludingShadowDOM(root = document, includeHidden = false
   const allElements = [];
   
   function traverse(node, isShadowRoot = false) {
-    // If it's an element, add it to our list
+    // If it's an element, add it to our list (with visibility check if needed)
     if (node.nodeType === Node.ELEMENT_NODE) {
-      allElements.push({
-        element: node,
-        isShadowDOM: isShadowRoot,
-        shadowHost: isShadowRoot ? node.getRootNode().host : null
-      });
+      // Only add the element if we're including hidden elements OR if it's visible
+      if (includeHidden || isElementVisible(node)) {
+        allElements.push({
+          element: node,
+          isShadowDOM: isShadowRoot,
+          shadowHost: isShadowRoot ? node.getRootNode().host : null
+        });
+      }
     }
     
     // Traverse children
@@ -218,49 +221,135 @@ function getRelevantStyles(element) {
   }
 }
 
-// Highlighting functionality
-function highlightElement(element) {
+// Highlighting functionality - Green highlighting for scan-time
+function highlightElementForScan(element) {
   if (!element || window.highlightedElements.includes(element)) return;
+  
+  console.log('🟢 Applying scan highlight to element:', element.tagName, element.id || element.className);
   
   // Store original styles
   const originalOutline = element.style.outline;
   const originalBoxShadow = element.style.boxShadow;
   const originalZIndex = element.style.zIndex;
+  const originalTransition = element.style.transition;
+  const originalBackground = element.style.backgroundColor;
   
-  // Apply highlighting
-  element.style.outline = '2px solid #00ff88';
-  element.style.boxShadow = '0 0 8px rgba(0, 255, 136, 0.6)';
+  // Apply green outline with minimal background for scan-time (like original)
+  element.style.transition = 'all 0.2s ease';
+  element.style.outline = '2px solid #00ff00';
+  element.style.boxShadow = '0 0 4px rgba(0, 255, 0, 0.3)';
   element.style.zIndex = '999999';
+  // Keep background transparent/white like original
+  element.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
   
   // Store element and original styles for cleanup
   element._originalStyles = {
     outline: originalOutline,
     boxShadow: originalBoxShadow,
-    zIndex: originalZIndex
+    zIndex: originalZIndex,
+    transition: originalTransition,
+    backgroundColor: originalBackground
+  };
+  
+  window.highlightedElements.push(element);
+}
+
+// Orange/red highlighting for UI-triggered highlighting (🎯 button clicks)
+function highlightElement(element, skipClearAndScroll = false) {
+  if (!element) {
+    console.error('❌ No element provided for highlighting');
+    return;
+  }
+  
+  console.log('🎯 Applying UI highlight to element:', element.tagName, element.id || element.className);
+  
+  // Clear any existing highlights first (only for the first element)
+  if (!skipClearAndScroll) {
+    clearHighlights();
+    
+    // Scroll element into view with smooth animation (only for the first element)
+    try {
+      element.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'center', 
+        inline: 'center' 
+      });
+      console.log('📍 Scrolled element into view');
+    } catch (scrollError) {
+      console.warn('⚠️ Could not scroll element into view:', scrollError);
+    }
+  }
+  
+  // Store original styles
+  const originalOutline = element.style.outline;
+  const originalBoxShadow = element.style.boxShadow;
+  const originalZIndex = element.style.zIndex;
+  const originalTransition = element.style.transition;
+  const originalBackground = element.style.backgroundColor;
+  const originalTransform = element.style.transform;
+  
+  console.log('💾 Stored original styles for element');
+  
+  // Apply bright orange/red highlighting with maximum visibility
+  element.style.transition = 'all 0.3s ease';
+  element.style.outline = '5px solid #ff4500 !important';
+  element.style.boxShadow = '0 0 30px rgba(255, 69, 0, 1), inset 0 0 30px rgba(255, 69, 0, 0.4) !important';
+  element.style.zIndex = '999999 !important';
+  element.style.backgroundColor = 'rgba(255, 69, 0, 0.2) !important';
+  element.style.transform = 'scale(1.02)';
+  
+  console.log('🎨 Applied orange highlighting styles');
+  
+  // Store element and original styles for cleanup
+  element._originalStyles = {
+    outline: originalOutline,
+    boxShadow: originalBoxShadow,
+    zIndex: originalZIndex,
+    transition: originalTransition,
+    backgroundColor: originalBackground,
+    transform: originalTransform
   };
   
   window.highlightedElements.push(element);
   
-  // Add a gentle flash effect
-  element.style.transition = 'all 0.3s ease';
+  // Add a strong pulsing effect for maximum visibility
   setTimeout(() => {
-    if (element.style.outline.includes('#00ff88')) {
-      element.style.outline = '2px solid rgba(0, 255, 136, 0.8)';
+    if (element.style.outline && element.style.outline.includes('#ff4500')) {
+      element.style.outline = '5px solid rgba(255, 69, 0, 0.8) !important';
+      element.style.boxShadow = '0 0 40px rgba(255, 69, 0, 1), inset 0 0 40px rgba(255, 69, 0, 0.5) !important';
+      console.log('💫 Applied first pulse effect');
     }
-  }, 100);
+  }, 150);
+  
+  // Add a second pulse for extra visibility
+  setTimeout(() => {
+    if (element.style.outline && (element.style.outline.includes('#ff4500') || element.style.outline.includes('255, 69, 0'))) {
+      element.style.outline = '5px solid #ff4500 !important';
+      element.style.boxShadow = '0 0 35px rgba(255, 69, 0, 1), inset 0 0 35px rgba(255, 69, 0, 0.4) !important';
+      console.log('💫 Applied second pulse effect');
+    }
+  }, 300);
+  
+  console.log('✅ UI highlighting completed for element:', element.tagName);
 }
 
 function clearAllHighlighting() {
+  console.log('🧹 Clearing all highlights from', window.highlightedElements.length, 'elements');
   window.highlightedElements.forEach(element => {
     if (element && element._originalStyles) {
       element.style.outline = element._originalStyles.outline;
       element.style.boxShadow = element._originalStyles.boxShadow;
       element.style.zIndex = element._originalStyles.zIndex;
-      element.style.transition = '';
+      element.style.transition = element._originalStyles.transition;
+      element.style.backgroundColor = element._originalStyles.backgroundColor;
+      if (element._originalStyles.transform !== undefined) {
+        element.style.transform = element._originalStyles.transform;
+      }
       delete element._originalStyles;
     }
   });
   window.highlightedElements = [];
+  console.log('✅ All highlights cleared');
 }
 
 // Alias for consistency with new message handler
@@ -268,36 +357,75 @@ function clearHighlights() {
   clearAllHighlighting();
 }
 
-// Function to find elements including those in Shadow DOM
-function findElementBySelectorIncludingShadowDOM(selector) {
-  console.log('🔍 Searching for element with selector:', selector);
+// Function to find ALL elements including those in Shadow DOM (matches browser behavior)
+function findAllElementsBySelectorIncludingShadowDOM(selector) {
+  console.log('🔍 Searching for ALL elements with selector:', selector);
+  const foundElements = [];
   
-  // First try standard document query
-  let element = document.querySelector(selector);
-  if (element) {
-    console.log('✅ Found element in main document');
-    return element;
+  // First try standard document query for all elements
+  try {
+    const elements = document.querySelectorAll(selector);
+    if (elements.length > 0) {
+      foundElements.push(...Array.from(elements));
+      console.log(`✅ Found ${elements.length} elements in main document`);
+    }
+  } catch (e) {
+    console.error('❌ Invalid selector:', selector, e);
+    return [];
   }
   
-  // If not found, search in Shadow DOM trees
+  // Search in Shadow DOM trees
   const allElements = getAllElementsIncludingShadowDOM(document);
   for (const el of allElements) {
-    if (el.shadowRoot) {
+    if (el.element && el.element.shadowRoot) {
       try {
-        element = el.shadowRoot.querySelector(selector);
-        if (element) {
-          console.log('✅ Found element in Shadow DOM of:', el.tagName);
-          return element;
+        const shadowElements = el.element.shadowRoot.querySelectorAll(selector);
+        if (shadowElements.length > 0) {
+          foundElements.push(...Array.from(shadowElements));
+          console.log(`✅ Found ${shadowElements.length} elements in Shadow DOM of:`, el.element.tagName);
         }
       } catch (e) {
-        // Ignore errors from closed shadow roots
-        console.log('⚠️ Could not search in closed Shadow DOM');
+        // Ignore errors from closed shadow roots or invalid selectors
+        console.log('⚠️ Could not search in Shadow DOM:', e.message);
       }
     }
   }
   
-  console.log('❌ Element not found anywhere');
-  return null;
+  console.log(`🎯 Total elements found: ${foundElements.length}`);
+  return foundElements;
+}
+
+// Legacy function for backward compatibility (returns first element)
+function findElementBySelectorIncludingShadowDOM(selector) {
+  const elements = findAllElementsBySelectorIncludingShadowDOM(selector);
+  return elements.length > 0 ? elements[0] : null;
+}
+
+// Function to highlight all matching elements
+function highlightAllElements(elements) {
+  if (!elements || elements.length === 0) {
+    console.log('❌ No elements to highlight');
+    return false;
+  }
+  
+  console.log(`🎯 Highlighting ${elements.length} elements`);
+  
+  let successCount = 0;
+  elements.forEach((element, index) => {
+    try {
+      // For the first element, clear highlights and scroll into view
+      // For subsequent elements, skip clearing and scrolling
+      const skipClearAndScroll = index > 0;
+      highlightElement(element, skipClearAndScroll);
+      successCount++;
+      console.log(`✅ Highlighted element ${index + 1}/${elements.length}:`, element.tagName, element.id || element.className);
+    } catch (error) {
+      console.error(`❌ Failed to highlight element ${index + 1}:`, error);
+    }
+  });
+  
+  console.log(`🎯 Successfully highlighted ${successCount}/${elements.length} elements`);
+  return successCount > 0;
 }
 
 // Simple initialization
@@ -345,7 +473,6 @@ if (!window.universalLocatorInjected) {
           let totalChecked = 0;
           let visibleFound = 0;
           let skippedByTag = 0;
-          let skippedByVisibility = 0;
           let shadowDOMFound = 0;
           
           console.log(`🔍 Content: Found ${allElementsData.length} total elements to check (including Shadow DOM)`);
@@ -363,7 +490,6 @@ if (!window.universalLocatorInjected) {
             if (isShadowElement) {
               shadowDOMFound++;
             }
-            totalChecked++;
             
             // Skip script/style elements
             if (!el.tagName || ['SCRIPT', 'STYLE', 'META', 'LINK', 'HEAD', 'TITLE'].includes(el.tagName)) {
@@ -371,18 +497,13 @@ if (!window.universalLocatorInjected) {
               continue;
             }
             
-            // Only process visible elements
-            if (!isElementVisible(el)) {
-              skippedByVisibility++;
-              continue;
-            }
-            
+            // Elements are already filtered by visibility in getAllElementsIncludingShadowDOM
             visibleFound++;
             const rect = el.getBoundingClientRect();
             
-            // Highlight element if enabled
+            // Highlight element if enabled - use green highlighting for scan
             if (shouldHighlight) {
-              highlightElement(el);
+              highlightElementForScan(el);
             }
             
             // Enhanced element data with detailed context and attributes
@@ -687,12 +808,12 @@ if (!window.universalLocatorInjected) {
           
           console.log(`🔍 Content: Scan complete! Checked ${totalChecked} elements, found ${visibleFound} visible, captured ${results.length}`);
           console.log(`🔍 Content: Shadow DOM found: ${shadowDOMFound} elements`);
-          console.log(`🔍 Content: Filtering stats - Skipped by tag: ${skippedByTag}, Skipped by visibility: ${skippedByVisibility}`);
+          console.log(`🔍 Content: Filtering stats - Skipped by tag: ${skippedByTag}, Visible elements processed: ${visibleFound}`);
 
           // Validate results quality
           if (results.length === 0) {
             console.warn('🔍 Content: No elements found - this might indicate an issue');
-            throw new Error(`No visible elements found on page. Checked ${totalChecked} elements, ${skippedByVisibility} were not visible.`);
+            throw new Error(`No visible elements found on page. Checked ${totalChecked} elements, found ${visibleFound} visible elements.`);
           }
           
           if (results.length < 5 && visibleFound > 10) {
@@ -709,7 +830,7 @@ if (!window.universalLocatorInjected) {
               totalChecked,
               visibleFound,
               skippedByTag,
-              skippedByVisibility
+              shadowDOMFound
             }
           };
 
@@ -737,23 +858,29 @@ if (!window.universalLocatorInjected) {
             throw new Error('No selector provided for highlighting');
           }
           
-          console.log('🎯 Highlighting element with selector:', selector);
+          console.log('🎯 Highlighting ALL elements with selector:', selector);
           
-          // Clear previous highlights
-          clearHighlights();
-          
-          // Try to find and highlight the element
-          const element = findElementBySelectorIncludingShadowDOM(selector);
-          if (element) {
-            highlightElement(element);
-            console.log('✅ Element highlighted successfully');
-            sendResponse({ success: true, found: true });
+          // Find all matching elements (like browser dev tools)
+          const elements = findAllElementsBySelectorIncludingShadowDOM(selector);
+          if (elements.length > 0) {
+            const success = highlightAllElements(elements);
+            if (success) {
+              console.log(`✅ Successfully highlighted ${elements.length} elements`);
+              sendResponse({ 
+                success: true, 
+                found: true, 
+                count: elements.length 
+              });
+            } else {
+              console.log('❌ Failed to highlight elements');
+              sendResponse({ success: false, error: 'Failed to apply highlighting' });
+            }
           } else {
-            console.log('❌ Element not found for highlighting');
-            sendResponse({ success: true, found: false });
+            console.log('❌ No elements found for highlighting');
+            sendResponse({ success: true, found: false, count: 0 });
           }
         } catch (error) {
-          console.error('Error highlighting element:', error);
+          console.error('Error highlighting elements:', error);
           sendResponse({ success: false, error: error.message });
         }
         break;

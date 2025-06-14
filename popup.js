@@ -288,9 +288,92 @@ document.addEventListener('DOMContentLoaded', () => {
     chrome.tabs.create({ url: 'results.html' });
   }
   
+  // Manual highlight functionality
+  const manualSelector = document.getElementById('manualSelector');
+  const manualHighlightBtn = document.getElementById('manualHighlightBtn');
+  
+  async function manualHighlight() {
+    try {
+      const selector = manualSelector?.value?.trim();
+      if (!selector) {
+        setStatus('Please enter a CSS selector');
+        return;
+      }
+      
+      setStatus('Highlighting element with selector: ' + selector);
+      if (manualHighlightBtn) manualHighlightBtn.disabled = true;
+      
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      
+      if (!tab || !tab.id) {
+        setStatus('No active tab found');
+        if (manualHighlightBtn) manualHighlightBtn.disabled = false;
+        return;
+      }
+      
+      console.log('🎯 Manual highlight: Sending to tab', tab.id, 'selector:', selector);
+      
+      // Send highlight message to content script
+      const response = await chrome.tabs.sendMessage(tab.id, {
+        action: 'highlightElement',
+        selector: selector
+      });
+      
+      console.log('🎯 Manual highlight response:', response);
+      
+      if (response && response.success) {
+        if (response.found) {
+          const count = response.count || 1;
+          if (count === 1) {
+            setStatus('✅ Element highlighted successfully! Check the page.');
+          } else {
+            setStatus(`✅ ${count} elements highlighted successfully! Check the page.`);
+          }
+        } else {
+          setStatus('⚠️ No elements found with selector: ' + selector);
+        }
+      } else {
+        setStatus('❌ Failed to highlight: ' + (response?.error || 'Unknown error'));
+      }
+      
+    } catch (error) {
+      console.error('Manual highlight error:', error);
+      
+      // Check if it's a content script issue
+      if (error.message.includes('Could not establish connection') || 
+          error.message.includes('Receiving end does not exist')) {
+        
+        setStatus('⚠️ Content script not found - try refreshing the page first');
+      } else {
+        setStatus('❌ Highlight failed: ' + error.message);
+      }
+    } finally {
+      if (manualHighlightBtn) manualHighlightBtn.disabled = false;
+    }
+  }
+  
   // Wire up events
   if (scanBtn) scanBtn.onclick = scanWithHighlighting;
   if (viewResultsBtn) viewResultsBtn.onclick = viewResults;
+  if (manualHighlightBtn) manualHighlightBtn.onclick = manualHighlight;
+  
+  // Enable Enter key in the selector input
+  if (manualSelector) {
+    manualSelector.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        manualHighlight();
+      }
+    });
+    
+    // Auto-clear status when typing
+    manualSelector.addEventListener('input', () => {
+      if (manualSelector.value.trim()) {
+        setStatus('Ready to highlight: ' + manualSelector.value.trim());
+      } else {
+        setStatus('Ready to scan any webpage or HTML file!');
+      }
+    });
+  }
   
   // Set initial state
   setStatus('Ready to scan any webpage or HTML file!');
