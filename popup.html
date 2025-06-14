@@ -83,17 +83,26 @@
     }
 
     .scan-buttons {
-      display: flex;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
       gap: 8px;
       margin-bottom: 15px;
     }
 
     .scan-button {
-      flex: 1;
+      padding: 12px;
+      background: linear-gradient(45deg, #00ff88, #00aaff);
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
     }
 
     .view-results-button {
-      flex: 1;
+      grid-column: 1 / -1;
       padding: 12px;
       background: linear-gradient(45deg, #667eea, #764ba2);
       border: none;
@@ -407,8 +416,15 @@
         <button id="scanButton" class="scan-button">
           🔍 Scan Page Elements
         </button>
+        <button id="scanAreaButton" class="scan-button">
+          📦 Scan Area
+        </button>
         <button id="viewResultsButton" class="view-results-button" disabled>
           📋 View Scanned Results
+        </button>
+        <!-- Debug test button -->
+        <button id="testEnableButton" style="background: #ff4444; margin-top: 10px; padding: 5px; border: none; color: white; border-radius: 4px; cursor: pointer;">
+          🔧 Test Enable View Results
         </button>
       </div>
     </div>

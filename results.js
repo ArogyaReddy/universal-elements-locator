@@ -342,6 +342,7 @@ function displayElements() {
                         <th>Attributes</th>
                         <th>Context</th>
                         <th>State</th>
+                        <th style="background: #10b981; color: white;">🎯 Unique Locators</th>
                         <th>Primary Locators</th>
                         <th>Secondary Locators</th>
                         <th>Fallback Locators</th>
@@ -419,6 +420,9 @@ function createElementRow(element, index) {
                 </td>
                 <td class="state-cell">
                     ${createStateDisplay(element.elementState || {})}
+                </td>
+                <td class="locators-cell unique-locators" style="background: rgba(16, 185, 129, 0.1);">
+                    ${createLocatorsList(locators.unique || [], 'unique')}
                 </td>
                 <td class="locators-cell">${createLocatorsList(locators.primary, 'primary')}</td>
                 <td class="locators-cell">${createLocatorsList(locators.secondary, 'secondary')}</td>
@@ -502,18 +506,23 @@ function createLocatorsList(locators, type) {
     
     if (!locators || locators.length === 0) {
         console.log(`🔍 Debug: No locators for type ${type}, returning dash`);
+        if (type === 'unique') {
+            return '<div style="color: #f59e0b; font-style: italic;">⚠️ No unique selectors available</div>';
+        }
         return '-';
     }
     
     console.log(`🔍 Debug: Found ${locators.length} locators for type ${type}`);
     
     const locatorId = `locators_${type}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const isUnique = type === 'unique';
     
-    return `<div class="locators-list" data-locator-id="${locatorId}">
-        <div class="locators-header">
-            <button class="copy-btn" data-action="copy-all" data-type="${type}" title="Copy all ${type} locators">
-                📋 Copy All ${safeString(type).charAt(0).toUpperCase() + safeString(type).slice(1)}
+    return `<div class="locators-list ${isUnique ? 'unique-locators-list' : ''}" data-locator-id="${locatorId}">
+        <div class="locators-header ${isUnique ? 'unique-header' : ''}">
+            <button class="copy-btn ${isUnique ? 'unique-copy-btn' : ''}" data-action="copy-all" data-type="${type}" title="Copy all ${type} locators">
+                ${isUnique ? '🎯' : '📋'} Copy All ${safeString(type).charAt(0).toUpperCase() + safeString(type).slice(1)}
             </button>
+            ${isUnique ? '<div style="font-size: 11px; color: #10b981; margin-top: 4px;">✅ Guaranteed unique selectors</div>' : ''}
         </div>
         ${locators.map((loc) => {
             // Apply highlighting to locator selector
@@ -525,14 +534,28 @@ function createLocatorsList(locators, type) {
                 highlightSearchTerm(loc.type, currentSearchTerm) : 
                 escapeHtml(loc.type);
             
-            return `<div class="locator-item locator-${type}" data-locator="${escapeHtml(loc.selector)}">
+            // Special handling for unique locators
+            const uniqueClass = isUnique ? 'unique-locator-item' : '';
+            const matchCountDisplay = loc.matchCount !== undefined ? 
+                `<span class="match-count" style="font-size: 10px; color: ${loc.matchCount === 1 ? '#10b981' : '#f59e0b'};">
+                    ${loc.matchCount === 1 ? '✅ Unique' : `⚠️ ${loc.matchCount} matches`}
+                </span>` : '';
+            
+            const descriptionDisplay = loc.description ? 
+                `<div class="locator-description" style="font-size: 11px; color: #666; margin-top: 2px; font-style: italic;">
+                    ${escapeHtml(loc.description)}
+                </div>` : '';
+            
+            return `<div class="locator-item locator-${type} ${uniqueClass}" data-locator="${escapeHtml(loc.selector)}">
                 <div class="locator-content">
-                    <div class="locator-type">${highlightedType}</div>
+                    <div class="locator-type" style="${isUnique ? 'color: #10b981; font-weight: bold;' : ''}">${highlightedType}</div>
                     <div class="locator-value" title="${highlightedSelector}">${highlightedSelector}</div>
+                    ${matchCountDisplay}
+                    ${descriptionDisplay}
                 </div>
                 <div class="locator-actions">
-                    <button class="highlight-btn" data-action="highlight" data-locator="${escapeHtml(loc.selector)}" title="Highlight this element on the page">🎯</button>
-                    <button class="copy-single-btn" data-action="copy-single" data-locator="${escapeHtml(loc.selector)}" title="Copy this locator">📋</button>
+                    <button class="highlight-btn ${isUnique ? 'unique-highlight-btn' : ''}" data-action="highlight" data-locator="${escapeHtml(loc.selector)}" title="Highlight this element on the page">${isUnique ? '🎯' : '🎯'}</button>
+                    <button class="copy-single-btn ${isUnique ? 'unique-copy-single-btn' : ''}" data-action="copy-single" data-locator="${escapeHtml(loc.selector)}" title="Copy this locator">${isUnique ? '✅' : '📋'}</button>
                 </div>
             </div>`;
         }).join('')}

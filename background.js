@@ -3,8 +3,27 @@
 
 console.log('Universal Element Locator background script loaded');
 
+// Store area scan results temporarily
+let areaScanResults = null;
+
 chrome.runtime.onInstalled.addListener(() => {
   console.log('Extension installed successfully');
+});
+
+// Handle messages and route them appropriately
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log('🔄 BACKGROUND: Received message:', message.action);
+  
+  if (message.action === 'areaScanComplete') {
+    console.log('🔄 BACKGROUND: Storing area scan results');
+    areaScanResults = message;
+    // Store in chrome storage as well
+    chrome.storage.local.set({ areaScanResults: message });
+  } else if (message.action === 'getAreaScanResults') {
+    console.log('🔄 BACKGROUND: Popup requesting area scan results');
+    sendResponse(areaScanResults);
+    areaScanResults = null; // Clear after retrieval
+  }
 });
 
 // Auto-inject content script when pages load

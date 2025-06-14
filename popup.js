@@ -6,7 +6,22 @@ document.addEventListener('DOMContentLoaded', () => {
   
   const statusEl = document.getElementById('status');
   const scanBtn = document.getElementById('scanButton');
+  const scanAreaBtn = document.getElementById('scanAreaButton');
   const viewResultsBtn = document.getElementById('viewResultsButton');
+  
+  // Debug: Check if all elements are found
+  console.log('🔧 POPUP DEBUG: Elements found:', {
+    scanBtn: !!scanBtn,
+    scanAreaBtn: !!scanAreaBtn, 
+    viewResultsBtn: !!viewResultsBtn,
+    statusEl: !!statusEl
+  });
+  
+  // Test the enable function immediately
+  setTimeout(() => {
+    console.log('🔧 POPUP DEBUG: Testing enableViewResults function...');
+    enableViewResults(true);
+  }, 1000);
   
   let scanResults = null;
   
@@ -15,8 +30,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   
   function enableViewResults(enable = true) {
+    console.log('📦 POPUP: enableViewResults called with:', enable);
     if (viewResultsBtn) {
       viewResultsBtn.disabled = !enable;
+      console.log('📦 POPUP: View Results button disabled state:', viewResultsBtn.disabled);
+    } else {
+      console.log('📦 POPUP: View Results button not found!');
     }
   }
   
@@ -278,6 +297,151 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
   
+  async function scanArea() {
+    try {
+      setStatus('Click on any area to scan its elements...');
+      if (scanAreaBtn) scanAreaBtn.disabled = true;
+      
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      
+      if (!tab || !tab.url) {
+        setStatus('No active tab found');
+        if (scanAreaBtn) scanAreaBtn.disabled = false;
+        return;
+      }
+      
+      // Check if URL is supported
+      const url = tab.url;
+      const isSupported = url.startsWith('http://') || 
+                         url.startsWith('https://') || 
+                         url.startsWith('file://') ||
+                         url.startsWith('data:text/html');
+      
+      const isBlocked = url.startsWith('chrome://') || 
+                       url.startsWith('chrome-extension://') ||
+                       url.startsWith('moz-extension://') ||
+                       url.startsWith('about:') ||
+                       url.startsWith('edge://') ||
+                       url.startsWith('brave://');
+      
+      if (isBlocked) {
+        setStatus('❌ Cannot scan browser internal pages');
+        if (scanAreaBtn) scanAreaBtn.disabled = false;
+        return;
+      }
+      
+      if (!isSupported) {
+        setStatus('❌ URL not supported for scanning');
+        if (scanAreaBtn) scanAreaBtn.disabled = false;
+        return;
+      }
+      
+      // Inject content script if needed and start area scan mode
+      try {
+        // Try to communicate with content script first
+        let response = null;
+        try {
+          response = await chrome.tabs.sendMessage(tab.id, { 
+            action: 'startAreaScanMode'
+          });
+        } catch (error) {
+          console.log('Content script not available, injecting...');
+        }
+        
+        // If no response, inject content script
+        if (!response) {
+          await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            files: ['content.js']
+          });
+          
+          // Wait a bit for injection
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          // Try again
+          response = await chrome.tabs.sendMessage(tab.id, { 
+            action: 'startAreaScanMode'
+          });
+        }
+         if (response && response.success) {
+          setStatus('✨ Area scan mode active! Click on any container/area to scan its elements. Results will appear when you reopen this popup.');
+          
+          // No need for complex message listening since popup will close when user clicks
+          // Just disable the button and let the user know to reopen popup after scanning
+          if (scanAreaBtn) scanAreaBtn.disabled = false;
+          
+        } else {
+          setStatus('❌ Failed to activate area scan mode');
+          if (scanAreaBtn) scanAreaBtn.disabled = false;
+        }
+        
+      } catch (error) {
+        console.error('Failed to inject content script:', error);
+        setStatus('❌ Failed to prepare page for scanning');
+        if (scanAreaBtn) scanAreaBtn.disabled = false;
+      }
+      
+    } catch (error) {
+      console.error('Area scan failed:', error);
+      setStatus('❌ Area scan failed - please try again');
+      if (scanAreaBtn) scanAreaBtn.disabled = false;
+    }
+  }
+  
+  function handleAreaScanResults(results, containerInfo) {
+    console.log('📦 POPUP: handleAreaScanResults called with:', results, containerInfo);
+    try {
+      setStatus(`✅ Area scan complete! Found ${results.elements.length} elements in ${containerInfo.tagName}`);
+      
+      // Prepare scan results in the same format as full page scan
+      scanResults = {
+        url: containerInfo.url,
+        title: `Area Scan: ${containerInfo.tagName}${containerInfo.id ? '#' + containerInfo.id : ''}${containerInfo.className ? '.' + containerInfo.className.split(' ')[0] : ''}`,
+        timestamp: new Date().toISOString(),
+        scanType: 'area',
+        containerInfo: containerInfo,
+        duration: results.scanDuration || 100,
+        totalElements: results.elements.length,
+        elements: results.elements || []
+      };
+      
+      console.log('📦 POPUP: Prepared scan results:', scanResults);
+      
+      // Save scan results
+      chrome.storage.local.clear().then(() => {
+        console.log('📦 POPUP: Storage cleared, saving new results...');
+        chrome.storage.local.set({ scanResults }).then(() => {
+          console.log('📦 POPUP: Scan results saved to storage');
+          // Enable view results button
+          enableViewResults(true);
+          setStatus(`✅ Area scan complete! Found ${results.elements.length} elements. Click "View Results" to see details.`);
+          
+          // Clear highlighting after a delay
+          setTimeout(async () => {
+            try {
+              const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+              await chrome.tabs.sendMessage(tab.id, { action: 'clearHighlighting' });
+            } catch (error) {
+              console.log('Note: Could not clear highlighting:', error.message);
+            }
+          }, 3000);
+        }).catch(error => {
+          console.error('📦 POPUP: Failed to save results to storage:', error);
+          setStatus('❌ Failed to save scan results');
+        });
+      }).catch(error => {
+        console.error('📦 POPUP: Failed to clear storage:', error);
+        setStatus('❌ Failed to prepare storage for results');
+      });
+      
+    } catch (error) {
+      console.error('📦 POPUP: Failed to handle area scan results:', error);
+      setStatus('❌ Failed to process area scan results');
+    } finally {
+      if (scanAreaBtn) scanAreaBtn.disabled = false;
+    }
+  }
+
   async function viewResults() {
     if (!scanResults) {
       setStatus('No scan results available - please scan first');
@@ -292,6 +456,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const manualSelector = document.getElementById('manualSelector');
   const manualHighlightBtn = document.getElementById('manualHighlightBtn');
   const scanElementBtn = document.getElementById('scanElement');
+  const testEnableBtn = document.getElementById('testEnableButton');
   
   // Element scan mode state
   let isElementScanMode = false;
@@ -819,9 +984,27 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Wire up events
   if (scanBtn) scanBtn.onclick = scanWithHighlighting;
+  if (scanAreaBtn) scanAreaBtn.onclick = scanArea;
   if (viewResultsBtn) viewResultsBtn.onclick = viewResults;
   if (manualHighlightBtn) manualHighlightBtn.onclick = manualHighlight;
   if (scanElementBtn) scanElementBtn.onclick = toggleElementScanMode;
+  if (testEnableBtn) testEnableBtn.onclick = () => {
+    console.log('🔧 POPUP DEBUG: Test button clicked, enabling view results...');
+    enableViewResults(true);
+    // Also create fake results for testing
+    scanResults = {
+      url: 'test://example.com',
+      title: 'Test Results',
+      timestamp: new Date().toISOString(),
+      scanType: 'test',
+      totalElements: 5,
+      elements: [
+        { id: 'test1', tagName: 'div', locators: { primary: [{ selector: '#test1' }] } },
+        { id: 'test2', tagName: 'button', locators: { primary: [{ selector: '#test2' }] } }
+      ]
+    };
+    setStatus('🔧 Test: View Results button enabled with fake data');
+  };
   
   // Enable Enter key in the selector input
   if (manualSelector) {
@@ -844,4 +1027,29 @@ document.addEventListener('DOMContentLoaded', () => {
   // Set initial state
   setStatus('Ready to scan any webpage or HTML file!');
   enableViewResults(false);
+  
+  // Check for any pending area scan results when popup opens
+  setTimeout(async () => {
+    try {
+      console.log('📦 POPUP: Checking for pending area scan results...');
+      
+      // Check storage first
+      const data = await chrome.storage.local.get(['areaScanResults']);
+      if (data.areaScanResults && data.areaScanResults.timestamp > Date.now() - 60000) {
+        console.log('📦 POPUP: Found pending area scan results in storage');
+        handleAreaScanResults(data.areaScanResults.results, data.areaScanResults.containerInfo);
+        chrome.storage.local.remove(['areaScanResults']);
+        return;
+      }
+      
+      // Also check background script
+      const response = await chrome.runtime.sendMessage({ action: 'getAreaScanResults' });
+      if (response && response.results) {
+        console.log('📦 POPUP: Found pending area scan results in background');
+        handleAreaScanResults(response.results, response.containerInfo);
+      }
+    } catch (error) {
+      console.log('📦 POPUP: No pending results found:', error.message);
+    }
+  }, 100);
 });

@@ -303,7 +303,7 @@ function highlightElement(element, skipClearAndScroll = false) {
   const originalZIndex = element.style.zIndex;
   const originalTransition = element.style.transition;
   const originalBackground = element.style.backgroundColor;
-  // Removed originalTransform since we're not using transform anymore
+  // Removed originalTransform since we'renot using transform anymore
   
   console.log('💾 Stored original styles for element');
   
@@ -414,7 +414,24 @@ function clearAllHighlighting() {
     }
   });
   window.highlightedElements = [];
-  console.log('✅ All highlights cleared');
+  
+  // Clear number badges
+  if (window.elementNumberBadges) {
+    window.elementNumberBadges.forEach(badge => {
+      if (badge && badge.parentElement) {
+        badge.remove();
+      }
+    });
+    window.elementNumberBadges = [];
+  }
+  
+  // Clear multi-element summary
+  const summary = document.getElementById('multi-element-summary');
+  if (summary) {
+    summary.remove();
+  }
+  
+  console.log('✅ All highlights and badges cleared');
 }
 
 // Alias for consistency with new message handler
@@ -461,14 +478,14 @@ function findAllElementsBySelectorIncludingShadowDOM(selector) {
 }
 
 // Legacy function for backward compatibility (returns first element)
-// Function to highlight all matching elements
+// Function to highlight all matching elements with numbered badges
 function highlightAllElements(elements) {
   if (!elements || elements.length === 0) {
     console.log('❌ No elements to highlight');
     return false;
   }
   
-  console.log(`🎯 Highlighting ${elements.length} elements`);
+  console.log(`🎯 Highlighting ${elements.length} elements with numbered badges`);
   
   let successCount = 0;
   elements.forEach((element, index) => {
@@ -476,7 +493,7 @@ function highlightAllElements(elements) {
       // For the first element, clear highlights and scroll into view
       // For subsequent elements, skip clearing and scrolling
       const skipClearAndScroll = index > 0;
-      highlightElement(element, skipClearAndScroll);
+      highlightElementWithNumber(element, index + 1, elements.length, skipClearAndScroll);
       successCount++;
       console.log(`✅ Highlighted element ${index + 1}/${elements.length}:`, element.tagName, element.id || element.className);
     } catch (error) {
@@ -485,7 +502,139 @@ function highlightAllElements(elements) {
   });
   
   console.log(`🎯 Successfully highlighted ${successCount}/${elements.length} elements`);
+  
+  // If multiple elements, show summary overlay
+  if (elements.length > 1) {
+    showMultiElementSummary(elements.length);
+  }
+  
   return successCount > 0;
+}
+
+// Enhanced highlight function that adds a numbered badge
+function highlightElementWithNumber(element, number, total, skipClearAndScroll = false) {
+  if (!element) return;
+  
+  // First do the regular highlighting
+  highlightElement(element, skipClearAndScroll);
+  
+  // Then add a numbered badge
+  addNumberBadgeToElement(element, number, total);
+}
+
+function addNumberBadgeToElement(element, number, total) {
+  try {
+    // Remove any existing badge first
+    const existingBadge = element.querySelector('.element-number-badge');
+    if (existingBadge) {
+      existingBadge.remove();
+    }
+    
+    // Create numbered badge
+    const badge = document.createElement('div');
+    badge.className = 'element-number-badge';
+    badge.style.cssText = `
+      position: absolute !important;
+      top: -10px !important;
+      left: -10px !important;
+      z-index: 999999 !important;
+      background: #ff4444 !important;
+      color: white !important;
+      border-radius: 50% !important;
+      width: 24px !important;
+      height: 24px !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+      font-size: 12px !important;
+      font-weight: bold !important;
+      border: 2px solid white !important;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3) !important;
+      pointer-events: none !important;
+    `;
+    badge.textContent = number.toString();
+    badge.title = `Element ${number} of ${total}`;
+    
+    // Make sure the element has relative positioning to contain the badge
+    const computedStyle = getComputedStyle(element);
+    if (computedStyle.position === 'static') {
+      element.style.position = 'relative';
+    }
+    
+    // Add the badge to the element
+    element.appendChild(badge);
+    
+    // Store badge reference for cleanup
+    if (!window.elementNumberBadges) {
+      window.elementNumberBadges = [];
+    }
+    window.elementNumberBadges.push(badge);
+    
+  } catch (error) {
+    console.error('Failed to add number badge:', error);
+  }
+}
+
+function showMultiElementSummary(totalElements) {
+  // Remove existing summary if any
+  const existingSummary = document.getElementById('multi-element-summary');
+  if (existingSummary) {
+    existingSummary.remove();
+  }
+  
+  // Create summary overlay
+  const summary = document.createElement('div');
+  summary.id = 'multi-element-summary';
+  summary.style.cssText = `
+    position: fixed !important;
+    top: 20px !important;
+    right: 20px !important;
+    z-index: 999999 !important;
+    background: rgba(0,0,0,0.9) !important;
+    color: white !important;
+    padding: 15px 20px !important;
+    border-radius: 8px !important;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+    font-size: 14px !important;
+    border: 2px solid #ff4444 !important;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3) !important;
+    min-width: 200px !important;
+  `;
+  
+  summary.innerHTML = `
+    <div style="font-weight: bold; margin-bottom: 8px; color: #ff4444;">
+      🎯 Multiple Elements Found
+    </div>
+    <div style="margin-bottom: 8px;">
+      Found <strong>${totalElements}</strong> matching elements
+    </div>
+    <div style="font-size: 12px; opacity: 0.8; line-height: 1.4;">
+      Each element is numbered with a red badge.<br>
+      Use specific selectors from the results<br>
+      to target individual elements.
+    </div>
+    <button onclick="this.parentElement.remove()" style="
+      background: #ff4444;
+      border: none;
+      color: white;
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      margin-top: 10px;
+      cursor: pointer;
+      width: 100%;
+    ">Close</button>
+  `;
+  
+  document.body.appendChild(summary);
+  
+  // Auto-remove after 10 seconds
+  setTimeout(() => {
+    if (summary && summary.parentElement) {
+      summary.remove();
+    }
+  }, 10000);
 }
 
 // Simple initialization
@@ -983,6 +1132,17 @@ if (!window.universalLocatorInjected) {
           sendResponse({ success: true });
         } catch (error) {
           console.error('Error stopping element scan mode:', error);
+          sendResponse({ success: false, error: error.message });
+        }
+        break;
+        
+      case 'startAreaScanMode':
+        try {
+          console.log('📦 Starting area scan mode...');
+          startAreaScanMode();
+          sendResponse({ success: true });
+        } catch (error) {
+          console.error('Error starting area scan mode:', error);
           sendResponse({ success: false, error: error.message });
         }
         break;
@@ -1622,4 +1782,654 @@ function createElementLocatorsPopup(elementData) {
   }
   
   console.log('🎯 Element locators popup created and displayed');
+}
+
+// Area Scan Mode Functions
+function startAreaScanMode() {
+  console.log('📦 Starting area scan mode...');
+  
+  if (window.isAreaScanMode) {
+    console.log('📦 Area scan mode already active');
+    return;
+  }
+  
+  window.isAreaScanMode = true;
+  
+  // Clear any existing highlights
+  clearAllHighlighting();
+  
+  // Change cursor to crosshair
+  document.body.style.cursor = 'crosshair';
+  
+  // Create overlay to show scan mode is active
+  const overlay = document.createElement('div');
+  overlay.id = 'area-scan-overlay';
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 100, 255, 0.05);
+    z-index: 999998;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  `;
+  
+  const instruction = document.createElement('div');
+  instruction.style.cssText = `
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 20px 30px;
+    border-radius: 12px;
+    font-size: 16px;
+    text-align: center;
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+  `;
+  instruction.innerHTML = `
+    <div style="font-size: 20px; margin-bottom: 10px;">📦 Area Scan Mode</div>
+    <div>Click on any container to scan all its elements</div>
+    <div style="font-size: 14px; opacity: 0.8; margin-top: 10px;">Press ESC to cancel</div>
+  `;
+  
+  overlay.appendChild(instruction);
+  document.body.appendChild(overlay);
+  
+  // Hide instruction after 3 seconds
+  setTimeout(() => {
+    if (overlay.parentNode) {
+      overlay.style.opacity = '0';
+      overlay.style.transition = 'opacity 0.5s ease';
+      setTimeout(() => {
+        if (overlay.parentNode) {
+          overlay.remove();
+        }
+      }, 500);
+    }
+  }, 3000);
+  
+  // Create event listeners
+  const hoverListener = (event) => {
+    if (!window.isAreaScanMode) return;
+    
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const element = event.target;
+    
+    // Clear previous hover highlight
+    if (window.areaScanHoverElement) {
+      removeAreaScanHighlight(window.areaScanHoverElement);
+    }
+    
+    // Apply new hover highlight for area
+    window.areaScanHoverElement = element;
+    addAreaScanHighlight(element);
+  };
+  
+  const clickListener = (event) => {
+    if (!window.isAreaScanMode) return;
+    
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const container = event.target;
+    console.log('📦 Container selected for area scanning:', container);
+    
+    // Scan all elements within the selected container
+    scanAreaElements(container);
+    
+    // Exit area scan mode
+    stopAreaScanMode();
+  };
+  
+  const escapeListener = (event) => {
+    if (!window.isAreaScanMode) return;
+    
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      console.log('📦 Escape pressed - exiting area scan mode');
+      
+      // Send cancellation message to popup
+      try {
+        chrome.runtime.sendMessage({
+          action: 'areaScanCancelled'
+        });
+      } catch (error) {
+        console.log('Could not send cancellation message:', error);
+      }
+      
+      stopAreaScanMode();
+    }
+  };
+  
+  // Add event listeners
+  document.addEventListener('mouseover', hoverListener, true);
+  document.addEventListener('click', clickListener, true);
+  document.addEventListener('keydown', escapeListener, true);
+  
+  // Store listeners for cleanup
+  window.areaScanEventListeners = [
+    { element: document, event: 'mouseover', listener: hoverListener, options: true },
+    { element: document, event: 'click', listener: clickListener, options: true },
+    { element: document, event: 'keydown', listener: escapeListener, options: true }
+  ];
+  
+  console.log('📦 Area scan mode activated - hover to highlight area, click to scan area, ESC to cancel');
+}
+
+function stopAreaScanMode() {
+  console.log('📦 Stopping area scan mode...');
+  
+  if (!window.isAreaScanMode) {
+    console.log('📦 Area scan mode not active');
+    return;
+  }
+  
+  window.isAreaScanMode = false;
+  
+  // Restore cursor
+  document.body.style.cursor = '';
+  
+  // Remove overlay if it exists
+  const overlay = document.getElementById('area-scan-overlay');
+  if (overlay) {
+    overlay.remove();
+  }
+  
+  // Clear hover highlight
+  if (window.areaScanHoverElement) {
+    removeAreaScanHighlight(window.areaScanHoverElement);
+    window.areaScanHoverElement = null;
+  }
+  
+  // Remove event listeners
+  if (window.areaScanEventListeners) {
+    window.areaScanEventListeners.forEach(({ element, event, listener, options }) => {
+      element.removeEventListener(event, listener, options);
+    });
+    window.areaScanEventListeners = [];
+  }
+  
+  console.log('📦 Area scan mode deactivated');
+}
+
+function addAreaScanHighlight(element) {
+  if (!element) return;
+  
+  // Store original styles
+  if (!element._areaScanOriginalStyles) {
+    element._areaScanOriginalStyles = {
+      outline: element.style.outline,
+      backgroundColor: element.style.backgroundColor,
+      border: element.style.border,
+      boxShadow: element.style.boxShadow
+    };
+  }
+  
+  // Apply area scan highlight (blue theme for containers)
+  element.style.outline = '3px dashed #0066ff';
+  element.style.backgroundColor = 'rgba(0, 100, 255, 0.1)';
+  element.style.border = '2px solid #0066ff';
+  element.style.boxShadow = '0 0 20px rgba(0, 100, 255, 0.3)';
+}
+
+function removeAreaScanHighlight(element) {
+  if (!element || !element._areaScanOriginalStyles) return;
+  
+  // Restore original styles
+  element.style.outline = element._areaScanOriginalStyles.outline;
+  element.style.backgroundColor = element._areaScanOriginalStyles.backgroundColor;
+  element.style.border = element._areaScanOriginalStyles.border;
+  element.style.boxShadow = element._areaScanOriginalStyles.boxShadow;
+  
+  delete element._areaScanOriginalStyles;
+}
+
+function scanAreaElements(container) {
+  console.log('📦 Scanning all elements within container:', container);
+  
+  if (!container) {
+    console.error('❌ No container provided for area scanning');
+    return;
+  }
+  
+  try {
+    // Collect container information
+    const containerInfo = {
+      tagName: container.tagName.toLowerCase(),
+      id: container.id || '',
+      className: container.className || '',
+      url: window.location.href,
+      selector: generateSimpleSelector(container)
+    };
+    
+    // Find all scannable elements within this container
+    const allElements = container.querySelectorAll('*');
+    const scannableElements = [];
+    
+    console.log(`📦 Found ${allElements.length} total elements in container`);
+    
+    // Filter and process elements
+    for (const element of allElements) {
+      // Skip script/style elements
+      if (!element.tagName || ['SCRIPT', 'STYLE', 'META', 'LINK', 'HEAD', 'TITLE', 'NOSCRIPT'].includes(element.tagName)) {
+        continue;
+      }
+      
+      // Check if element is visible
+      if (!isElementVisible(element)) {
+        continue;
+      }
+      
+      // Generate element data similar to full page scan
+      const elementData = generateCompleteElementData(element, true); // true indicates it's within a container
+      if (elementData) {
+        scannableElements.push(elementData);
+      }
+      
+      // Limit to prevent performance issues
+      if (scannableElements.length >= 100) {
+        console.log('📦 Reached 100 element limit for area scan');
+        break;
+      }
+    }
+    
+    console.log(`📦 Area scan complete: ${scannableElements.length} scannable elements found`);
+    
+    // Send results back to popup
+    try {
+      console.log('📦 CONTENT: Sending area scan results to popup:', scannableElements.length, 'elements');
+      
+      // Store results in storage immediately as well as sending message
+      const areaScanResults = {
+        action: 'areaScanComplete',
+        results: {
+          elements: scannableElements,
+          scanDuration: Date.now() % 1000 // Simple duration
+        },
+        containerInfo: containerInfo,
+        timestamp: Date.now()
+      };
+      
+      // Store in local storage as backup
+      chrome.storage.local.set({ areaScanResults });
+      
+      // Send message to popup
+      chrome.runtime.sendMessage(areaScanResults);
+      console.log('📦 CONTENT: Area scan results sent successfully');
+    } catch (error) {
+      console.error('📦 CONTENT: Failed to send area scan results:', error);
+    }
+    
+    // Highlight found elements briefly
+    scannableElements.forEach((elementData, index) => {
+      setTimeout(() => {
+        const element = document.querySelector(elementData.locators.primary[0]?.selector);
+        if (element) {
+          highlightElementLightly(element, true); // true = skip clear and scroll
+        }
+      }, index * 50); // Stagger highlighting
+    });
+    
+  } catch (error) {
+    console.error('📦 Area scan failed:', error);
+    
+    // Send error back to popup
+    try {
+      chrome.runtime.sendMessage({
+        action: 'areaScanCancelled'
+      });
+    } catch (msgError) {
+      console.log('Could not send error message:', msgError);
+    }
+  }
+}
+
+function generateSimpleSelector(element) {
+  if (element.id) {
+    return `#${element.id}`;
+  }
+  
+  if (element.className && typeof element.className === 'string') {
+    const classes = element.className.trim().split(/\s+/).filter(c => c);
+    if (classes.length > 0) {
+      return `.${classes[0]}`;
+    }
+  }
+  
+  return element.tagName.toLowerCase();
+}
+
+function generateCompleteElementData(element, isInContainer = false) {
+  try {
+    const rect = element.getBoundingClientRect();
+    
+    // Basic element information
+    const elementData = {
+      tagName: element.tagName.toLowerCase(),
+      text: getCleanText(element),
+      attributes: {},
+      position: {
+        x: Math.round(rect.left + window.scrollX),
+        y: Math.round(rect.top + window.scrollY),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height)
+      },
+      locators: {
+        primary: [],
+        secondary: [],
+        fallback: [],
+        unique: [] // New category for guaranteed unique selectors
+      },
+      context: {
+        isInContainer: isInContainer,
+        parentTagName: element.parentElement?.tagName?.toLowerCase() || '',
+        hasChildren: element.children.length > 0,
+        childCount: element.children.length,
+        indexInParent: Array.from(element.parentElement?.children || []).indexOf(element),
+        indexOfType: Array.from(element.parentElement?.querySelectorAll(element.tagName) || []).indexOf(element)
+      }
+    };
+    
+    // Copy attributes
+    for (const attr of element.attributes) {
+      elementData.attributes[attr.name] = attr.value;
+    }
+    
+    // Generate primary locators (high priority)
+    
+    // 1. ID
+    if (element.id) {
+      const selector = `#${element.id}`;
+      const isUnique = isSelectorUnique(selector);
+      elementData.locators[isUnique ? 'unique' : 'primary'].push({
+        type: 'id',
+        selector: selector,
+        value: element.id,
+        isUnique: isUnique
+      });
+    }
+    
+    // 2. Data attributes with uniqueness enhancement
+    for (const attr of element.attributes) {
+      if (attr.name.startsWith('data-')) {
+        const basicSelector = `[${attr.name}="${attr.value}"]`;
+        const isBasicUnique = isSelectorUnique(basicSelector);
+        
+        // Add basic selector
+        elementData.locators[isBasicUnique ? 'unique' : 'primary'].push({
+          type: attr.name,
+          selector: basicSelector,
+          value: attr.value,
+          isUnique: isBasicUnique,
+          matchCount: isBasicUnique ? 1 : document.querySelectorAll(basicSelector).length
+        });
+        
+        // If not unique, generate enhanced selectors
+        if (!isBasicUnique) {
+          const enhancedSelectors = generateUniqueSelectorsForAttribute(element, attr.name, attr.value);
+          enhancedSelectors.forEach(enhanced => {
+            elementData.locators.unique.push(enhanced);
+          });
+        }
+      }
+    }
+    
+    // 3. Name attribute
+    if (element.name) {
+      const selector = `[name="${element.name}"]`;
+      const isUnique = isSelectorUnique(selector);
+      elementData.locators[isUnique ? 'unique' : 'primary'].push({
+        type: 'name',
+        selector: selector,
+        value: element.name,
+        isUnique: isUnique,
+        matchCount: isUnique ? 1 : document.querySelectorAll(selector).length
+      });
+    }
+    
+    // Generate secondary locators
+    
+    // 4. Classes
+    if (element.className && typeof element.className === 'string') {
+      const classes = element.className.trim().split(/\s+/).filter(c => c);
+      if (classes.length > 0) {
+        const selector = `.${classes.join('.')}`;
+        const isUnique = isSelectorUnique(selector);
+        elementData.locators[isUnique ? 'unique' : 'secondary'].push({
+          type: 'class',
+          selector: selector,
+          value: classes.join(' '),
+          isUnique: isUnique,
+          matchCount: isUnique ? 1 : document.querySelectorAll(selector).length
+        });
+      }
+    }
+    
+    // 5. Generate guaranteed unique selectors
+    const guaranteedUnique = generateGuaranteedUniqueSelectors(element);
+    guaranteedUnique.forEach(unique => {
+      elementData.locators.unique.push(unique);
+    });
+    
+    // 6. Tag selector (always fallback)
+    elementData.locators.fallback.push({
+      type: 'tag',
+      selector: element.tagName.toLowerCase(),
+      value: element.tagName.toLowerCase(),
+      isUnique: false,
+      matchCount: document.querySelectorAll(element.tagName.toLowerCase()).length
+    });
+    
+    return elementData;
+    
+  } catch (error) {
+    console.error('Failed to generate element data:', error);
+    return null;
+  }
+}
+
+// Helper functions for generating unique selectors
+function generateUniqueSelectorsForAttribute(element, attrName, attrValue) {
+  const uniqueSelectors = [];
+  const basicSelector = `[${attrName}="${attrValue}"]`;
+  const matchingElements = Array.from(document.querySelectorAll(basicSelector));
+  const elementIndex = matchingElements.indexOf(element);
+  
+  if (elementIndex === -1) return uniqueSelectors;
+  
+  // Method 1: nth-of-type with attribute
+  const nthOfTypeSelector = `${element.tagName.toLowerCase()}[${attrName}="${attrValue}"]:nth-of-type(${elementIndex + 1})`;
+  if (isSelectorUnique(nthOfTypeSelector)) {
+    uniqueSelectors.push({
+      type: `${attrName}-nth-of-type`,
+      selector: nthOfTypeSelector,
+      value: `${attrValue} (${elementIndex + 1} of ${matchingElements.length})`,
+      isUnique: true,
+      matchCount: 1,
+      description: `${elementIndex + 1}${getOrdinalSuffix(elementIndex + 1)} ${element.tagName.toLowerCase()} element with ${attrName}="${attrValue}"`
+    });
+  }
+  
+  // Method 2: nth-child with attribute
+  if (element.parentElement) {
+    const siblingIndex = Array.from(element.parentElement.children).indexOf(element) + 1;
+    const nthChildSelector = `${element.tagName.toLowerCase()}[${attrName}="${attrValue}"]:nth-child(${siblingIndex})`;
+    if (isSelectorUnique(nthChildSelector)) {
+      uniqueSelectors.push({
+        type: `${attrName}-nth-child`,
+        selector: nthChildSelector,
+        value: `${attrValue} (child ${siblingIndex})`,
+        isUnique: true,
+        matchCount: 1,
+        description: `${siblingIndex}${getOrdinalSuffix(siblingIndex)} child element with ${attrName}="${attrValue}"`
+      });
+    }
+  }
+  
+  // Method 3: Combine with parent context
+  if (element.parentElement && element.parentElement.id) {
+    const parentSelector = `#${element.parentElement.id} [${attrName}="${attrValue}"]`;
+    const parentMatches = document.querySelectorAll(parentSelector);
+    if (parentMatches.length > 0) {
+      const parentIndex = Array.from(parentMatches).indexOf(element);
+      if (parentIndex !== -1) {
+        const parentContextSelector = `#${element.parentElement.id} [${attrName}="${attrValue}"]:nth-of-type(${parentIndex + 1})`;
+        if (isSelectorUnique(parentContextSelector)) {
+          uniqueSelectors.push({
+            type: `${attrName}-parent-context`,
+            selector: parentContextSelector,
+            value: `${attrValue} (in #${element.parentElement.id}, ${parentIndex + 1} of ${parentMatches.length})`,
+            isUnique: true,
+            matchCount: 1,
+            description: `${parentIndex + 1}${getOrdinalSuffix(parentIndex + 1)} element with ${attrName}="${attrValue}" inside #${element.parentElement.id}`
+          });
+        }
+      }
+    }
+  }
+  
+  // Method 4: Combine with additional attributes
+  for (const attr of element.attributes) {
+    if (attr.name !== attrName && !attr.name.startsWith('data-testid') && attr.value) {
+      const combinedSelector = `[${attrName}="${attrValue}"][${attr.name}="${attr.value}"]`;
+      if (isSelectorUnique(combinedSelector)) {
+        uniqueSelectors.push({
+          type: `${attrName}-combined`,
+          selector: combinedSelector,
+          value: `${attrValue} + ${attr.name}="${attr.value}"`,
+          isUnique: true,
+          matchCount: 1,
+          description: `Element with ${attrName}="${attrValue}" and ${attr.name}="${attr.value}"`
+        });
+        break; // Only need one working combination
+      }
+    }
+  }
+  
+  // Method 5: Position-based with text content
+  const elementText = getCleanText(element);
+  if (elementText && elementText.length > 0) {
+    // Note: :contains is not standard CSS, so we provide text-based description
+    uniqueSelectors.push({
+      type: `${attrName}-text`,
+      selector: `[${attrName}="${attrValue}"]`, // We'll add text matching in description
+      value: `${attrValue} (with text: "${elementText.substring(0, 30)}${elementText.length > 30 ? '...' : ''}")`,
+      isUnique: false, // Not truly unique by selector alone
+      matchCount: matchingElements.length,
+      description: `Element with ${attrName}="${attrValue}" containing text "${elementText.substring(0, 50)}${elementText.length > 50 ? '...' : ''}"`
+    });
+  }
+  
+  return uniqueSelectors;
+}
+
+function generateGuaranteedUniqueSelectors(element) {
+  const uniqueSelectors = [];
+  
+  // Method 1: Full path selector
+  const fullPath = getElementPath(element);
+  if (fullPath && isSelectorUnique(fullPath)) {
+    uniqueSelectors.push({
+      type: 'full-path',
+      selector: fullPath,
+      value: 'Full DOM path',
+      isUnique: true,
+      matchCount: 1,
+      description: 'Unique DOM path selector'
+    });
+  }
+  
+  // Method 2: XPath-style positioning
+  if (element.parentElement) {
+    const siblings = Array.from(element.parentElement.children);
+    const sameTagSiblings = siblings.filter(el => el.tagName === element.tagName);
+    const indexInSameTag = sameTagSiblings.indexOf(element) + 1;
+    
+    let parentSelector = '';
+    if (element.parentElement.id) {
+      parentSelector = `#${element.parentElement.id}`;
+    } else if (element.parentElement.className) {
+      const parentClasses = element.parentElement.className.trim().split(/\s+/);
+      parentSelector = `.${parentClasses[0]}`;
+    } else {
+      parentSelector = element.parentElement.tagName.toLowerCase();
+    }
+    
+    const xpathLikeSelector = `${parentSelector} > ${element.tagName.toLowerCase()}:nth-of-type(${indexInSameTag})`;
+    if (isSelectorUnique(xpathLikeSelector)) {
+      uniqueSelectors.push({
+        type: 'xpath-like',
+        selector: xpathLikeSelector,
+        value: `${indexInSameTag}${getOrdinalSuffix(indexInSameTag)} ${element.tagName.toLowerCase()} in parent`,
+        isUnique: true,
+        matchCount: 1,
+        description: `${indexInSameTag}${getOrdinalSuffix(indexInSameTag)} ${element.tagName.toLowerCase()} element in its parent container`
+      });
+    }
+  }
+  
+  // Method 3: Coordinate-based description (not a selector, but helpful for identification)
+  const rect = element.getBoundingClientRect();
+  if (rect.width > 0 && rect.height > 0) {
+    uniqueSelectors.push({
+      type: 'position',
+      selector: `/* Element at position (${Math.round(rect.left)}, ${Math.round(rect.top)}) */`,
+      value: `Position: (${Math.round(rect.left)}, ${Math.round(rect.top)})`,
+      isUnique: false,
+      matchCount: 1,
+      description: `Element located at coordinates (${Math.round(rect.left)}, ${Math.round(rect.top)}) with size ${Math.round(rect.width)}×${Math.round(rect.height)}px`
+    });
+  }
+  
+  return uniqueSelectors;
+}
+
+function getElementPath(element) {
+  if (element.id) {
+    return `#${element.id}`;
+  }
+  
+  const path = [];
+  let current = element;
+  
+  while (current && current.nodeType === Node.ELEMENT_NODE) {
+    let selector = current.tagName.toLowerCase();
+    
+    if (current.id) {
+      selector = `#${current.id}`;
+      path.unshift(selector);
+      break;
+    } else {
+      const parent = current.parentElement;
+      if (parent) {
+        const siblings = Array.from(parent.children).filter(child => 
+          child.tagName === current.tagName
+        );
+        if (siblings.length > 1) {
+          const index = siblings.indexOf(current) + 1;
+          selector += `:nth-of-type(${index})`;
+        }
+      }
+      path.unshift(selector);
+    }
+    
+    current = current.parentElement;
+  }
+  
+  return path.join(' > ');
+}
+
+function getOrdinalSuffix(num) {
+  const j = num % 10;
+  const k = num % 100;
+  if (j === 1 && k !== 11) return 'st';
+  if (j === 2 && k !== 12) return 'nd';
+  if (j === 3 && k !== 13) return 'rd';
+  return 'th';
 }
