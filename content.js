@@ -5,102 +5,130 @@ console.log('Universal Element Locator: Content script starting...');
 // Enhanced helper function to recursively traverse Shadow DOM
 function getAllElementsIncludingShadowDOM(root = document, includeHidden = false) {
   const allElements = [];
+  const processedNodes = new WeakSet(); // Prevent infinite loops
   
-  function traverse(node, isShadowRoot = false) {
-    // If it's an element, add it to our list (with visibility check if needed)
+  function traverse(node, isShadowRoot = false, shadowHost = null) {
+    // Avoid processing the same node twice
+    if (processedNodes.has(node)) return;
+    processedNodes.add(node);
+    
+    // If it's an element, add it to our list
     if (node.nodeType === Node.ELEMENT_NODE) {
-      // Only add the element if we're including hidden elements OR if it's visible
-      if (includeHidden || isElementVisible(node)) {
+      // When includeHidden is true, collect ALL elements without visibility filtering
+      // When includeHidden is false, apply basic filtering but be lenient
+      const shouldInclude = includeHidden || isElementVisible(node);
+      
+      if (shouldInclude) {
         allElements.push({
           element: node,
           isShadowDOM: isShadowRoot,
-          shadowHost: isShadowRoot ? node.getRootNode().host : null
+          shadowHost: shadowHost
         });
       }
+      
+      // Even if element is not visible, still traverse its children
+      // (they might be visible due to CSS)
     }
     
-    // Traverse children
-    if (node.childNodes) {
+    // Traverse all child nodes, not just elements
+    if (node.childNodes && node.childNodes.length > 0) {
       for (const child of node.childNodes) {
-        traverse(child, isShadowRoot);
+        traverse(child, isShadowRoot, shadowHost);
       }
     }
     
-    // If this element has a shadow root, traverse it too
+    // If this element has a shadow root, traverse it
     if (node.nodeType === Node.ELEMENT_NODE && node.shadowRoot) {
-      console.log('🔍 Content: Found Shadow DOM on element:', node.tagName, node.id || node.className);
-      traverse(node.shadowRoot, true);
+      console.log('🔍 Content: Found open Shadow DOM on element:', node.tagName, node.id || node.className);
+      try {
+        traverse(node.shadowRoot, true, node);
+      } catch (e) {
+        console.warn('Could not traverse shadow root:', e);
+      }
     }
     
-    // Also check for closed shadow roots using common patterns
+    // Also check for closed shadow roots and other shadow patterns
     if (node.nodeType === Node.ELEMENT_NODE) {
-      // Some frameworks store shadow root references
-      const possibleShadowKeys = ['_shadowRoot', '__shadowRoot', 'shadowRoot'];
+      // Try various shadow root access patterns
+      const possibleShadowKeys = [
+        '_shadowRoot', '__shadowRoot', 'shadowRoot',
+        '_$shadowRoot', '__SHADOW_ROOT__', 'closedShadowRoot'
+      ];
+      
       for (const key of possibleShadowKeys) {
-        if (node[key] && typeof node[key] === 'object' && node[key].nodeType) {
-          console.log('🔍 Content: Found closed Shadow DOM via', key, 'on element:', node.tagName);
-          traverse(node[key], true);
+        try {
+          if (node[key] && typeof node[key] === 'object' && 
+              node[key].nodeType && !processedNodes.has(node[key])) {
+            console.log('🔍 Content: Found closed Shadow DOM via', key, 'on element:', node.tagName);
+            traverse(node[key], true, node);
+          }
+        } catch (e) {
+          // Ignore errors when trying to access shadow roots
         }
+      }
+      
+      // Also check for web component registries and custom elements
+      if (node.tagName && node.tagName.includes('-')) {
+        console.log('🔍 Content: Found custom element:', node.tagName);
+        // Custom elements might have internal shadow DOM
       }
     }
   }
   
+  console.log('🔍 Content: Starting comprehensive element traversal...');
   traverse(root);
+  console.log(`🔍 Content: Traversal complete. Found ${allElements.length} elements total.`);
+  
   return allElements;
 }
 
-// Enhanced helper function to check if element is truly visible
+// Enhanced helper function to check if element is truly visible - more lenient approach
 function isElementVisible(element) {
   try {
     if (!element || !element.isConnected) return false;
     
     const style = window.getComputedStyle(element);
     
-    // Check CSS visibility properties
-    if (style.display === 'none' || 
-        style.visibility === 'hidden' || 
-        parseFloat(style.opacity) === 0) {
+    // Check CSS visibility properties (be lenient)
+    if (style.display === 'none') {
+      return false;
+    }
+    
+    // Don't filter on visibility: hidden for now - some sites use this for interactive elements
+    // if (style.visibility === 'hidden') {
+    //   return false;
+    // }
+    
+    // Allow very low opacity but not completely transparent
+    if (parseFloat(style.opacity) === 0) {
       return false;
     }
     
     // Get element bounds
     const rect = element.getBoundingClientRect();
     
-    // Check if element has dimensions
-    if (rect.width === 0 || rect.height === 0) {
+    // Allow elements with very small dimensions (some buttons/links are tiny)
+    if (rect.width === 0 && rect.height === 0) {
       return false;
     }
     
-    // Check if element is significantly offscreen (allowing for some margin)
-    const viewport = {
-      width: window.innerWidth || document.documentElement.clientWidth,
-      height: window.innerHeight || document.documentElement.clientHeight
-    };
+    // Be much more lenient with offscreen elements - don't filter them
+    // Many elements are legitimately outside viewport but still interactive
     
-    if (rect.right < -500 || 
-        rect.left > viewport.width + 500 ||
-        rect.bottom < -500 || 
-        rect.top > viewport.height + 500) {
-      return false;
-    }
-    
-    // Check for parent elements that might hide this element
-    let parent = element.parentElement;
-    let checkDepth = 0;
-    while (parent && checkDepth < 3) { // Only check a few levels up for performance
+    // Only check if parent is completely hidden
+    const parent = element.parentElement;
+    if (parent) {
       const parentStyle = window.getComputedStyle(parent);
-      if (parentStyle.display === 'none' || 
-          parentStyle.visibility === 'hidden' ||
-          parseFloat(parentStyle.opacity) === 0) {
+      if (parentStyle.display === 'none') {
         return false;
       }
-      parent = parent.parentElement;
-      checkDepth++;
     }
     
     return true;
   } catch (e) {
-    return false;
+    // If we can't determine visibility, assume it's visible to be safe
+    console.warn('Visibility check failed for element:', e);
+    return true;
   }
 }
 
@@ -225,7 +253,28 @@ function getRelevantStyles(element) {
 function highlightElementForScan(element) {
   if (!element || window.highlightedElements.includes(element)) return;
   
-  console.log('🟢 Applying scan highlight to element:', element.tagName, element.id || element.className);
+  // Enhanced logging for debugging
+  const elementInfo = {
+    tagName: element.tagName,
+    id: element.id,
+    className: element.className,
+    text: element.textContent?.trim()?.substring(0, 30),
+    href: element.href
+  };
+  console.log('🟢 Applying scan highlight to element:', elementInfo);
+  
+  // Special logging for links to track visual_user
+  if (element.tagName === 'A') {
+    console.log('🔗 Highlighting LINK:', {
+      text: element.textContent?.trim(),
+      href: element.href,
+      classes: element.className
+    });
+    
+    if (element.textContent?.trim() === 'visual_user') {
+      console.log('✅ FOUND AND HIGHLIGHTING visual_user link!');
+    }
+  }
   
   // Store original styles
   const originalOutline = element.style.outline;
@@ -396,6 +445,7 @@ function findAllElementsBySelectorIncludingShadowDOM(selector) {
 }
 
 // Legacy function for backward compatibility (returns first element)
+// eslint-disable-next-line no-unused-vars
 function findElementBySelectorIncludingShadowDOM(selector) {
   const elements = findAllElementsBySelectorIncludingShadowDOM(selector);
   return elements.length > 0 ? elements[0] : null;
@@ -467,19 +517,21 @@ if (!window.universalLocatorInjected) {
           // Clear any existing highlighting first
           clearAllHighlighting();
           
-          // Use enhanced element collection that includes Shadow DOM
-          const allElementsData = getAllElementsIncludingShadowDOM(document, scanOptions.includeHidden);
+          // Use enhanced element collection - get ALL elements first, filter later
+          const allElementsData = getAllElementsIncludingShadowDOM(document, true); // Always get all elements
           const results = [];
           let totalChecked = 0;
           let visibleFound = 0;
           let skippedByTag = 0;
+          let skippedByVisibility = 0;
           let shadowDOMFound = 0;
           
           console.log(`🔍 Content: Found ${allElementsData.length} total elements to check (including Shadow DOM)`);
           console.log(`🔍 Content: Highlighting enabled: ${shouldHighlight}`);
+          console.log(`🔍 Content: Include hidden elements: ${scanOptions.includeHidden}`);
           
-          // Scan for visible elements only
-          for (let i = 0; i < allElementsData.length && results.length < 200; i++) {
+          // Scan for visible elements - increased limit and better filtering
+          for (let i = 0; i < allElementsData.length && results.length < 500; i++) {
             const elementInfo = allElementsData[i];
             const el = elementInfo.element;
             const isShadowElement = elementInfo.isShadowDOM;
@@ -491,19 +543,59 @@ if (!window.universalLocatorInjected) {
               shadowDOMFound++;
             }
             
-            // Skip script/style elements
-            if (!el.tagName || ['SCRIPT', 'STYLE', 'META', 'LINK', 'HEAD', 'TITLE'].includes(el.tagName)) {
+            // Skip fewer element types - only truly problematic ones
+            if (!el.tagName || ['SCRIPT', 'STYLE', 'META', 'LINK', 'HEAD', 'TITLE', 'NOSCRIPT'].includes(el.tagName)) {
               skippedByTag++;
               continue;
             }
             
-            // Elements are already filtered by visibility in getAllElementsIncludingShadowDOM
+            // Apply visibility filtering only once and with detailed logging
+            let isVisible = true;
+            if (!scanOptions.includeHidden) {
+              isVisible = isElementVisible(el);
+              if (!isVisible) {
+                skippedByVisibility++;
+                // Log details for debugging missing elements
+                if (el.tagName === 'A' || el.tagName === 'BUTTON' || el.tagName === 'INPUT') {
+                  console.log(`🔍 Content: Skipped ${el.tagName} element due to visibility:`, {
+                    text: el.textContent?.trim()?.substring(0, 50),
+                    id: el.id,
+                    class: el.className,
+                    display: window.getComputedStyle(el).display,
+                    visibility: window.getComputedStyle(el).visibility,
+                    opacity: window.getComputedStyle(el).opacity,
+                    rect: el.getBoundingClientRect()
+                  });
+                }
+                continue;
+              }
+            }
+            
             visibleFound++;
             const rect = el.getBoundingClientRect();
             
             // Highlight element if enabled - use green highlighting for scan
             if (shouldHighlight) {
-              highlightElementForScan(el);
+              try {
+                highlightElementForScan(el);
+                // Add a small delay to make highlighting more visible
+                if (i % 10 === 0) {
+                  console.log(`🟢 Highlighted ${i + 1} elements so far...`);
+                }
+              } catch (highlightError) {
+                console.warn('Failed to highlight element during scan:', highlightError);
+              }
+            }
+            
+            // Enhanced logging for specific element types we care about
+            if (el.tagName === 'A' || el.tagName === 'BUTTON') {
+              console.log(`🔍 Processing ${el.tagName}:`, {
+                text: el.textContent?.trim()?.substring(0, 30),
+                id: el.id,
+                class: el.className,
+                href: el.href,
+                highlighted: shouldHighlight
+              });
             }
             
             // Enhanced element data with detailed context and attributes
@@ -808,7 +900,7 @@ if (!window.universalLocatorInjected) {
           
           console.log(`🔍 Content: Scan complete! Checked ${totalChecked} elements, found ${visibleFound} visible, captured ${results.length}`);
           console.log(`🔍 Content: Shadow DOM found: ${shadowDOMFound} elements`);
-          console.log(`🔍 Content: Filtering stats - Skipped by tag: ${skippedByTag}, Visible elements processed: ${visibleFound}`);
+          console.log(`🔍 Content: Filtering stats - Skipped by tag: ${skippedByTag}, Skipped by visibility: ${skippedByVisibility}, Visible elements processed: ${visibleFound}`);
 
           // Validate results quality
           if (results.length === 0) {
@@ -830,6 +922,7 @@ if (!window.universalLocatorInjected) {
               totalChecked,
               visibleFound,
               skippedByTag,
+              skippedByVisibility,
               shadowDOMFound
             }
           };

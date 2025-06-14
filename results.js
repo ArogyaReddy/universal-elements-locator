@@ -378,6 +378,15 @@ function createElementRow(element, index) {
         
         // Generate element name based on available attributes
         const elementName = generateElementName(element);
+        
+        // Apply highlighting to element name and tag
+        const currentSearchTerm = getCurrentSearchTerm();
+        const highlightedElementName = currentSearchTerm ? 
+            highlightSearchTerm(elementName, currentSearchTerm) : 
+            escapeHtml(elementName);
+        const highlightedTagName = currentSearchTerm ? 
+            highlightSearchTerm(safeString(element.tagName).toUpperCase(), currentSearchTerm) : 
+            escapeHtml(safeString(element.tagName).toUpperCase());
 
         // Ensure locators exist and provide safe defaults
         const locators = element.locators || { primary: [], secondary: [], fallback: [] };
@@ -392,10 +401,10 @@ function createElementRow(element, index) {
             <tr class="element-row" data-element-index="${index}">
                 <td class="index-cell">${index + 1}</td>
                 <td class="name-cell">
-                    <span class="element-name" title="${elementName}">${elementName}</span>
+                    <span class="element-name" title="${highlightedElementName}">${highlightedElementName}</span>
                 </td>
                 <td class="tag-cell">
-                    <span class="element-tag">${safeString(element.tagName).toUpperCase()}</span> ${shadowIndicator}
+                    <span class="element-tag">${highlightedTagName}</span> ${shadowIndicator}
                     ${element.elementState?.isInteractive ? '<span class="interactive-indicator" title="Interactive element">🔗</span>' : ''}
                     ${element.elementState?.isFormElement ? '<span class="form-indicator" title="Form element">📝</span>' : ''}
                 </td>
@@ -506,18 +515,27 @@ function createLocatorsList(locators, type) {
                 📋 Copy All ${safeString(type).charAt(0).toUpperCase() + safeString(type).slice(1)}
             </button>
         </div>
-        ${locators.map((loc) => 
-            `<div class="locator-item locator-${type}" data-locator="${escapeHtml(loc.selector)}">
+        ${locators.map((loc) => {
+            // Apply highlighting to locator selector
+            const currentSearchTerm = getCurrentSearchTerm();
+            const highlightedSelector = currentSearchTerm ? 
+                highlightSearchTerm(loc.selector, currentSearchTerm) : 
+                escapeHtml(loc.selector);
+            const highlightedType = currentSearchTerm ? 
+                highlightSearchTerm(loc.type, currentSearchTerm) : 
+                escapeHtml(loc.type);
+            
+            return `<div class="locator-item locator-${type}" data-locator="${escapeHtml(loc.selector)}">
                 <div class="locator-content">
-                    <div class="locator-type">${loc.type}</div>
-                    <div class="locator-value" title="${escapeHtml(loc.selector)}">${escapeHtml(loc.selector)}</div>
+                    <div class="locator-type">${highlightedType}</div>
+                    <div class="locator-value" title="${highlightedSelector}">${highlightedSelector}</div>
                 </div>
                 <div class="locator-actions">
                     <button class="highlight-btn" data-action="highlight" data-locator="${escapeHtml(loc.selector)}" title="Highlight this element on the page">🎯</button>
                     <button class="copy-single-btn" data-action="copy-single" data-locator="${escapeHtml(loc.selector)}" title="Copy this locator">📋</button>
                 </div>
-            </div>`
-        ).join('')}
+            </div>`;
+        }).join('')}
     </div>`;
 }
 
@@ -836,10 +854,22 @@ function createTextContentDisplay(element) {
     }
     
     const safeSubstring = trimmedText.length > 40 ? trimmedText.substring(0, 40) : trimmedText;
+    
+    // Get current search term for highlighting
+    const currentSearchTerm = getCurrentSearchTerm();
+    
+    // Apply highlighting if there's a search term
+    const displayText = currentSearchTerm ? 
+        highlightSearchTerm(safeSubstring, currentSearchTerm) : 
+        escapeHtml(safeSubstring);
+    const titleText = currentSearchTerm ? 
+        highlightSearchTerm(trimmedText, currentSearchTerm) : 
+        escapeHtml(trimmedText);
+    
     return `
         <div class="text-content-display">
-            <div class="text-summary" title="${escapeHtml(trimmedText)}">
-                ${escapeHtml(safeSubstring)}${trimmedText.length > 40 ? '...' : ''}
+            <div class="text-summary" title="${titleText}">
+                ${displayText}${trimmedText.length > 40 ? '...' : ''}
             </div>
         </div>
     `;
@@ -865,8 +895,21 @@ function createAttributesDisplay(attributes) {
             ${attrEntries.slice(0, 3).map(([name, value]) => {
                 const valueStr = safeString(value);
                 const valueSafe = valueStr.length > 20 ? valueStr.substring(0, 20) : valueStr;
-                return `<div class="attr-item" title="${escapeHtml(name)}='${escapeHtml(valueStr)}'">
-                    <strong>${escapeHtml(name)}:</strong> ${escapeHtml(valueSafe)}${valueStr.length > 20 ? '...' : ''}
+                
+                // Apply highlighting to both name and value
+                const currentSearchTerm = getCurrentSearchTerm();
+                const highlightedName = currentSearchTerm ? 
+                    highlightSearchTerm(name, currentSearchTerm) : 
+                    escapeHtml(name);
+                const highlightedValue = currentSearchTerm ? 
+                    highlightSearchTerm(valueSafe, currentSearchTerm) : 
+                    escapeHtml(valueSafe);
+                const highlightedValueFull = currentSearchTerm ? 
+                    highlightSearchTerm(valueStr, currentSearchTerm) : 
+                    escapeHtml(valueStr);
+                
+                return `<div class="attr-item" title="${highlightedName}='${highlightedValueFull}'">
+                    <strong>${highlightedName}:</strong> ${highlightedValue}${valueStr.length > 20 ? '...' : ''}
                 </div>`;
             }).join('')}
             ${attrEntries.length > 3 ? `<div class="attr-item">+${attrEntries.length - 3} more...</div>` : ''}
@@ -1282,4 +1325,32 @@ function showNotification(message, type = 'info') {
             console.log('🔔 Notification hidden after', duration, 'ms');
         }
     }, duration);
+}
+
+// Helper function to highlight search terms in text
+function highlightSearchTerm(text, searchTerm) {
+    if (!text || !searchTerm) return escapeHtml(text || '');
+    
+    const safeText = safeString(text);
+    const safeTerm = safeString(searchTerm).toLowerCase();
+    
+    if (!safeText || !safeTerm) return escapeHtml(safeText);
+    
+    // Escape HTML first, then apply highlighting
+    const escapedText = escapeHtml(safeText);
+    
+    // Case-insensitive search and replace with highlighting
+    const regex = new RegExp(`(${escapeRegex(safeTerm)})`, 'gi');
+    return escapedText.replace(regex, '<mark class="search-highlight">$1</mark>');
+}
+
+// Helper function to escape regex special characters
+function escapeRegex(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Helper function to get current search term
+function getCurrentSearchTerm() {
+    const searchBox = document.getElementById('searchBox');
+    return searchBox ? safeTrim(searchBox.value.toLowerCase()) : '';
 }
