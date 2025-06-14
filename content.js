@@ -9,13 +9,28 @@ function getAllElementsIncludingShadowDOM(root = document, includeHidden = false
   function traverse(node, isShadowRoot = false) {
     // If it's an element, add it to our list (with visibility check if needed)
     if (node.nodeType === Node.ELEMENT_NODE) {
-      // Only add the element if we're including hidden elements OR if it's visible
-      if (includeHidden || isElementVisible(node)) {
-        allElements.push({
-          element: node,
-          isShadowDOM: isShadowRoot,
-          shadowHost: isShadowRoot ? node.getRootNode().host : null
-        });
+      // Skip only clearly problematic elements
+      const tagName = node.tagName.toLowerCase();
+      const skipElements = ['script', 'style', 'meta', 'link', 'head', 'title', 'noscript'];
+      
+      if (!skipElements.includes(tagName)) {
+        // Only add the element if we're including hidden elements OR if it's visible
+        if (includeHidden || isElementVisible(node)) {
+          allElements.push({
+            element: node,
+            isShadowDOM: isShadowRoot,
+            shadowHost: isShadowRoot ? node.getRootNode().host : null
+          });
+        } else {
+          // Even if not visible, add interactive/form elements as they might be important
+          if (['input', 'button', 'select', 'textarea', 'a', 'form'].includes(tagName)) {
+            allElements.push({
+              element: node,
+              isShadowDOM: isShadowRoot,
+              shadowHost: isShadowRoot ? node.getRootNode().host : null
+            });
+          }
+        }
       }
     }
     
@@ -66,21 +81,23 @@ function isElementVisible(element) {
     // Get element bounds
     const rect = element.getBoundingClientRect();
     
-    // Check if element has dimensions
-    if (rect.width === 0 || rect.height === 0) {
+    // Check if element has dimensions - but be more lenient for form elements and interactive elements
+    const isFormOrInteractive = ['input', 'button', 'select', 'textarea', 'a', 'label'].includes(element.tagName.toLowerCase());
+    if (!isFormOrInteractive && rect.width === 0 && rect.height === 0) {
       return false;
     }
     
-    // Check if element is significantly offscreen (allowing for some margin)
+    // Check if element is significantly offscreen (allowing for larger margin for scrollable content)
     const viewport = {
       width: window.innerWidth || document.documentElement.clientWidth,
       height: window.innerHeight || document.documentElement.clientHeight
     };
     
-    if (rect.right < -500 || 
-        rect.left > viewport.width + 500 ||
-        rect.bottom < -500 || 
-        rect.top > viewport.height + 500) {
+    // More lenient offscreen check - elements can be quite far offscreen and still be valid
+    if (rect.right < -2000 || 
+        rect.left > viewport.width + 2000 ||
+        rect.bottom < -2000 || 
+        rect.top > viewport.height + 2000) {
       return false;
     }
     
@@ -141,14 +158,14 @@ function getCleanText(element) {
       }
     }
     
-    // Filter out very long content (likely code or data)
-    if (cleanText.length > 300) {
-      return '';
+    // Filter out very long content (likely code or data) - but be more lenient
+    if (cleanText.length > 500) {
+      return cleanText.substring(0, 200).trim() + '...';
     }
     
-    // Filter out content that's mostly symbols or numbers
+    // Filter out content that's mostly symbols or numbers - but be more lenient  
     const alphaRatio = (cleanText.match(/[a-zA-Z]/g) || []).length / cleanText.length;
-    if (alphaRatio < 0.3 && cleanText.length > 10) {
+    if (alphaRatio < 0.2 && cleanText.length > 20) {
       return '';
     }
     
@@ -472,9 +489,18 @@ if (!window.universalLocatorInjected) {
           
           console.log(`🔍 Content: Found ${allElementsData.length} total elements to check (including Shadow DOM)`);
           console.log(`🔍 Content: Highlighting enabled: ${shouldHighlight}`);
+          console.log(`🔍 Content: Scan options:`, scanOptions);
+          
+          // Add debugging for element distribution
+          const elementsByTag = {};
+          allElementsData.forEach(({ element }) => {
+            const tag = element.tagName.toLowerCase();
+            elementsByTag[tag] = (elementsByTag[tag] || 0) + 1;
+          });
+          console.log(`🔍 Content: Element distribution:`, elementsByTag);
           
           // Scan for visible elements only
-          for (let i = 0; i < allElementsData.length && results.length < 200; i++) {
+          for (let i = 0; i < allElementsData.length && results.length < 1000; i++) {
             const elementInfo = allElementsData[i];
             const el = elementInfo.element;
             const isShadowElement = elementInfo.isShadowDOM;
@@ -486,8 +512,8 @@ if (!window.universalLocatorInjected) {
               shadowDOMFound++;
             }
             
-            // Skip script/style elements
-            if (!el.tagName || ['SCRIPT', 'STYLE', 'META', 'LINK', 'HEAD', 'TITLE'].includes(el.tagName)) {
+            // Skip only clearly non-scannable elements (but be very conservative)
+            if (!el.tagName || ['SCRIPT', 'STYLE', 'META', 'LINK', 'HEAD', 'TITLE', 'NOSCRIPT'].includes(el.tagName)) {
               skippedByTag++;
               continue;
             }
