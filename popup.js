@@ -291,6 +291,371 @@ document.addEventListener('DOMContentLoaded', () => {
   // Manual highlight functionality
   const manualSelector = document.getElementById('manualSelector');
   const manualHighlightBtn = document.getElementById('manualHighlightBtn');
+  const scanElementBtn = document.getElementById('scanElement');
+  
+  // Element scan mode state
+  let isElementScanMode = false;
+  
+  async function toggleElementScanMode() {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      
+      if (!tab || !tab.id) {
+        setStatus('No active tab found');
+        return;
+      }
+      
+      if (isElementScanMode) {
+        // Stop scan mode
+        setStatus('Stopping element scan mode...');
+        
+        const response = await chrome.tabs.sendMessage(tab.id, {
+          action: 'stopElementScan'
+        });
+        
+        if (response && response.success) {
+          isElementScanMode = false;
+          if (scanElementBtn) {
+            scanElementBtn.textContent = '🎯 Scan Element';
+            scanElementBtn.disabled = false;
+          }
+          setStatus('Element scan mode stopped');
+        } else {
+          setStatus('Failed to stop element scan mode');
+        }
+      } else {
+        // Start scan mode
+        setStatus('Starting element scan mode...');
+        if (scanElementBtn) {
+          scanElementBtn.textContent = '⏹️ Stop Scan';
+        }
+        
+        // Ensure content script is injected
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            files: ['content.js']
+          });
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } catch (error) {
+          console.log('Content script injection error:', error);
+        }
+        
+        const response = await chrome.tabs.sendMessage(tab.id, {
+          action: 'startElementScan'
+        });
+        
+        if (response && response.success) {
+          isElementScanMode = true;
+          setStatus('✅ Element scan mode active! Switch to the page and hover over elements.');
+          
+          // Listen for scanned element data
+          setupElementScanListener();
+        } else {
+          setStatus('Failed to start element scan mode');
+          if (scanElementBtn) {
+            scanElementBtn.textContent = '🎯 Scan Element';
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Element scan mode error:', error);
+      setStatus('Element scan failed: ' + error.message);
+      if (scanElementBtn) {
+        scanElementBtn.textContent = '🎯 Scan Element';
+        scanElementBtn.disabled = false;
+      }
+    }
+  }
+  
+  function setupElementScanListener() {
+    console.log('🎯 Setting up element scan listener...');
+    
+    // Listen for messages from content script about scanned elements
+    const messageListener = (message) => {
+      console.log('🎯 Popup received message:', message);
+      
+      if (message.action === 'elementScanned') {
+        console.log('🎯 Element scanned:', message.elementData);
+        showElementLocators(message.elementData);
+        
+        // Reset scan mode
+        isElementScanMode = false;
+        if (scanElementBtn) {
+          scanElementBtn.textContent = '🎯 Scan Element';
+        }
+        
+        // Remove this listener
+        chrome.runtime.onMessage.removeListener(messageListener);
+      } else if (message.action === 'elementScanError') {
+        console.error('🎯 Element scan error:', message.error);
+        setStatus('Element scan error: ' + message.error);
+        
+        // Reset scan mode
+        isElementScanMode = false;
+        if (scanElementBtn) {
+          scanElementBtn.textContent = '🎯 Scan Element';
+        }
+        
+        // Remove this listener
+        chrome.runtime.onMessage.removeListener(messageListener);
+      }
+    };
+    
+    chrome.runtime.onMessage.addListener(messageListener);
+    console.log('🎯 Element scan listener added');
+  }
+  
+  function showElementLocators(elementData) {
+    console.log('🎯 showElementLocators called with:', elementData);
+    // Create and show element locators popup
+    createElementLocatorsPopup(elementData);
+  }
+  
+  function createElementLocatorsPopup(elementData) {
+    console.log('🎯 createElementLocatorsPopup called with:', elementData);
+    
+    // Remove existing popup if any
+    const existingPopup = document.getElementById('element-locators-popup');
+    if (existingPopup) {
+      existingPopup.remove();
+      console.log('🎯 Removed existing popup');
+    }
+    
+    const popup = document.createElement('div');
+    popup.id = 'element-locators-popup';
+    popup.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      box-sizing: border-box;
+    `;
+    
+    const content = document.createElement('div');
+    content.style.cssText = `
+      background: white;
+      border-radius: 8px;
+      max-width: 800px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      color: #333;
+    `;
+    
+    const header = document.createElement('div');
+    header.style.cssText = `
+      padding: 20px;
+      border-bottom: 1px solid #e0e0e0;
+      display: flex;
+      justify-content: between;
+      align-items: center;
+    `;
+    
+    const title = document.createElement('h2');
+    title.style.cssText = `
+      margin: 0;
+      font-size: 18px;
+      flex: 1;
+    `;
+    title.textContent = `Element Locators: ${elementData.tagName.toUpperCase()}`;
+    
+    const closeBtn = document.createElement('button');
+    closeBtn.style.cssText = `
+      background: #f0f0f0;
+      border: none;
+      border-radius: 4px;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 14px;
+    `;
+    closeBtn.textContent = '✕ Close';
+    closeBtn.onclick = () => popup.remove();
+    
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+    
+    const body = document.createElement('div');
+    body.style.cssText = `padding: 20px;`;
+    
+    // Element info
+    const infoSection = document.createElement('div');
+    infoSection.style.cssText = `margin-bottom: 20px;`;
+    
+    const elementInfo = document.createElement('div');
+    elementInfo.style.cssText = `
+      background: #f8f9fa;
+      padding: 15px;
+      border-radius: 6px;
+      margin-bottom: 15px;
+    `;
+    
+    elementInfo.innerHTML = `
+      <div style="margin-bottom: 10px;">
+        <strong>Tag:</strong> ${elementData.tagName.toUpperCase()}
+        ${elementData.isShadowDOM ? ' <span style="color: #e67e22; font-weight: bold;">(Shadow DOM)</span>' : ''}
+      </div>
+      ${elementData.textContent.cleanText ? `<div style="margin-bottom: 10px;"><strong>Text:</strong> "${elementData.textContent.cleanText}"</div>` : ''}
+      ${elementData.attributes.id ? `<div style="margin-bottom: 10px;"><strong>ID:</strong> ${elementData.attributes.id}</div>` : ''}
+      ${elementData.attributes.class ? `<div style="margin-bottom: 10px;"><strong>Classes:</strong> ${elementData.attributes.class}</div>` : ''}
+      <div><strong>Position:</strong> ${elementData.position.x}, ${elementData.position.y} (${elementData.position.width}x${elementData.position.height})</div>
+    `;
+    
+    infoSection.appendChild(elementInfo);
+    
+    // Locators sections
+    const locatorSections = [
+      { title: 'Primary Locators (Recommended)', locators: elementData.locators.primary, style: 'background: #d4edda; border-left: 4px solid #28a745;' },
+      { title: 'Secondary Locators', locators: elementData.locators.secondary, style: 'background: #fff3cd; border-left: 4px solid #ffc107;' },
+      { title: 'Fallback Locators', locators: elementData.locators.fallback, style: 'background: #f8d7da; border-left: 4px solid #dc3545;' }
+    ];
+    
+    locatorSections.forEach(section => {
+      if (section.locators.length > 0) {
+        const sectionDiv = document.createElement('div');
+        sectionDiv.style.cssText = `margin-bottom: 20px;`;
+        
+        const sectionTitle = document.createElement('h3');
+        sectionTitle.style.cssText = `
+          margin: 0 0 10px 0;
+          font-size: 16px;
+          color: #333;
+        `;
+        sectionTitle.textContent = `${section.title} (${section.locators.length})`;
+        
+        sectionDiv.appendChild(sectionTitle);
+        
+        section.locators.forEach((locator) => {
+          const locatorDiv = document.createElement('div');
+          locatorDiv.style.cssText = `
+            ${section.style}
+            padding: 12px;
+            margin-bottom: 8px;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+          `;
+          
+          const selectorDiv = document.createElement('div');
+          selectorDiv.style.cssText = `
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 5px;
+          `;
+          
+          const selectorText = document.createElement('code');
+          selectorText.style.cssText = `
+            flex: 1;
+            background: rgba(0, 0, 0, 0.05);
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            word-break: break-all;
+          `;
+          selectorText.textContent = locator.selector;
+          
+          const copyBtn = document.createElement('button');
+          copyBtn.style.cssText = `
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            padding: 4px 8px;
+            cursor: pointer;
+            font-size: 11px;
+            white-space: nowrap;
+          `;
+          copyBtn.textContent = '📋 Copy';
+          copyBtn.onclick = () => {
+            navigator.clipboard.writeText(locator.selector);
+            copyBtn.textContent = '✅ Copied!';
+            setTimeout(() => {
+              copyBtn.textContent = '📋 Copy';
+            }, 2000);
+          };
+          
+          const highlightBtn = document.createElement('button');
+          highlightBtn.style.cssText = `
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            padding: 4px 8px;
+            cursor: pointer;
+            font-size: 11px;
+            white-space: nowrap;
+          `;
+          highlightBtn.textContent = '🎯 Test';
+          highlightBtn.onclick = async () => {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            if (tab) {
+              await chrome.tabs.sendMessage(tab.id, {
+                action: 'highlightElement',
+                selector: locator.selector
+              });
+              
+              highlightBtn.textContent = '✅ Highlighted!';
+              setTimeout(() => {
+                highlightBtn.textContent = '🎯 Test';
+              }, 2000);
+            }
+          };
+          
+          selectorDiv.appendChild(selectorText);
+          selectorDiv.appendChild(copyBtn);
+          selectorDiv.appendChild(highlightBtn);
+          
+          const metaDiv = document.createElement('div');
+          metaDiv.style.cssText = `
+            font-size: 11px;
+            color: #666;
+            margin-top: 5px;
+          `;
+          
+          let metaInfo = `Type: ${locator.type}`;
+          if (locator.isUnique !== undefined) {
+            metaInfo += ` | Unique: ${locator.isUnique ? '✅' : '❌'}`;
+          }
+          if (locator.shadowDOM) {
+            metaInfo += ' | Shadow DOM';
+          }
+          if (locator.note) {
+            metaInfo += ` | Note: ${locator.note}`;
+          }
+          
+          metaDiv.textContent = metaInfo;
+          
+          locatorDiv.appendChild(selectorDiv);
+          locatorDiv.appendChild(metaDiv);
+          
+          sectionDiv.appendChild(locatorDiv);
+        });
+        
+        body.appendChild(sectionDiv);
+      }
+    });
+    
+    content.appendChild(header);
+    content.appendChild(body);
+    popup.appendChild(content);
+    
+    document.body.appendChild(popup);
+    
+    // Auto-focus first copy button for keyboard users
+    const firstCopyBtn = popup.querySelector('button[onclick]');
+    if (firstCopyBtn) {
+      firstCopyBtn.focus();
+    }
+    
+    setStatus('Element scanned! Review locators in the popup.');
+  }
   
   async function manualHighlight() {
     try {
@@ -356,6 +721,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (scanBtn) scanBtn.onclick = scanWithHighlighting;
   if (viewResultsBtn) viewResultsBtn.onclick = viewResults;
   if (manualHighlightBtn) manualHighlightBtn.onclick = manualHighlight;
+  if (scanElementBtn) scanElementBtn.onclick = toggleElementScanMode;
   
   // Enable Enter key in the selector input
   if (manualSelector) {

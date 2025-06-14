@@ -335,19 +335,21 @@ function highlightElement(element, skipClearAndScroll = false) {
   const originalZIndex = element.style.zIndex;
   const originalTransition = element.style.transition;
   const originalBackground = element.style.backgroundColor;
-  const originalTransform = element.style.transform;
+  const originalBorder = element.style.border;
+  const originalBorderRadius = element.style.borderRadius;
   
   console.log('💾 Stored original styles for element');
   
-  // Apply bright orange/red highlighting with maximum visibility
-  element.style.transition = 'all 0.3s ease';
-  element.style.outline = '5px solid #ff4500 !important';
-  element.style.boxShadow = '0 0 30px rgba(255, 69, 0, 1), inset 0 0 30px rgba(255, 69, 0, 0.4) !important';
+  // Apply prominent border highlighting without animations - stable and clear
+  element.style.transition = 'all 0.2s ease';
+  element.style.outline = '4px solid #ff1744 !important';
+  element.style.border = '3px solid #ff1744 !important';
+  element.style.boxShadow = '0 0 15px rgba(255, 23, 68, 0.8), inset 0 0 10px rgba(255, 23, 68, 0.3) !important';
   element.style.zIndex = '999999 !important';
-  element.style.backgroundColor = 'rgba(255, 69, 0, 0.2) !important';
-  element.style.transform = 'scale(1.02)';
+  element.style.backgroundColor = 'rgba(255, 255, 0, 0.15) !important';
+  element.style.borderRadius = '4px !important';
   
-  console.log('🎨 Applied orange highlighting styles');
+  console.log('🎨 Applied stable border highlighting styles');
   
   // Store element and original styles for cleanup
   element._originalStyles = {
@@ -356,30 +358,13 @@ function highlightElement(element, skipClearAndScroll = false) {
     zIndex: originalZIndex,
     transition: originalTransition,
     backgroundColor: originalBackground,
-    transform: originalTransform
+    border: originalBorder,
+    borderRadius: originalBorderRadius
   };
   
   window.highlightedElements.push(element);
   
-  // Add a strong pulsing effect for maximum visibility
-  setTimeout(() => {
-    if (element.style.outline && element.style.outline.includes('#ff4500')) {
-      element.style.outline = '5px solid rgba(255, 69, 0, 0.8) !important';
-      element.style.boxShadow = '0 0 40px rgba(255, 69, 0, 1), inset 0 0 40px rgba(255, 69, 0, 0.5) !important';
-      console.log('💫 Applied first pulse effect');
-    }
-  }, 150);
-  
-  // Add a second pulse for extra visibility
-  setTimeout(() => {
-    if (element.style.outline && (element.style.outline.includes('#ff4500') || element.style.outline.includes('255, 69, 0'))) {
-      element.style.outline = '5px solid #ff4500 !important';
-      element.style.boxShadow = '0 0 35px rgba(255, 69, 0, 1), inset 0 0 35px rgba(255, 69, 0, 0.4) !important';
-      console.log('💫 Applied second pulse effect');
-    }
-  }, 300);
-  
-  console.log('✅ UI highlighting completed for element:', element.tagName);
+  console.log('✅ Stable border highlighting completed for element:', element.tagName);
 }
 
 function clearAllHighlighting() {
@@ -391,8 +376,11 @@ function clearAllHighlighting() {
       element.style.zIndex = element._originalStyles.zIndex;
       element.style.transition = element._originalStyles.transition;
       element.style.backgroundColor = element._originalStyles.backgroundColor;
-      if (element._originalStyles.transform !== undefined) {
-        element.style.transform = element._originalStyles.transform;
+      if (element._originalStyles.border !== undefined) {
+        element.style.border = element._originalStyles.border;
+      }
+      if (element._originalStyles.borderRadius !== undefined) {
+        element.style.borderRadius = element._originalStyles.borderRadius;
       }
       delete element._originalStyles;
     }
@@ -676,13 +664,16 @@ if (!window.universalLocatorInjected) {
               if (!isUnique || isShadowElement) {
                 const uniqueSelectors = generateUniqueSelector(el, baseSelector);
                 uniqueSelectors.slice(1).slice(0, 3).forEach((uniqueSelector, index) => {
+                  // Re-test uniqueness for contextual selectors
+                  const contextualIsUnique = !isShadowElement && isSelectorUnique(uniqueSelector);
+                  
                   elementData.locators.primary.push({
                     type: `id-contextual-${index + 1}`,
                     selector: uniqueSelector,
                     value: el.id,
                     shadowDOM: isShadowElement,
-                    isUnique: !isShadowElement && isSelectorUnique(uniqueSelector.replace('/* Shadow DOM */ ', '')),
-                    uniquenessLevel: 'contextual-id',
+                    isUnique: contextualIsUnique,
+                    uniquenessLevel: contextualIsUnique ? 'contextual-unique' : 'contextual-non-unique',
                     baseAttribute: 'id'
                   });
                 });
@@ -712,13 +703,16 @@ if (!window.universalLocatorInjected) {
                 if (!isUnique || isShadowElement) {
                   const uniqueSelectors = generateUniqueSelector(el, baseSelector);
                   uniqueSelectors.slice(1).forEach((uniqueSelector, index) => {
+                    // Important: Re-test uniqueness for each contextual selector
+                    const contextualIsUnique = !isShadowElement && isSelectorUnique(uniqueSelector);
+                    
                     elementData.locators.primary.push({
                       type: `${attr.name}-contextual-${index + 1}`,
                       selector: uniqueSelector,
                       value: attr.value,
                       shadowDOM: isShadowElement,
-                      isUnique: !isShadowElement && isSelectorUnique(uniqueSelector),
-                      uniquenessLevel: 'contextual',
+                      isUnique: contextualIsUnique,
+                      uniquenessLevel: contextualIsUnique ? 'contextual-unique' : 'contextual-non-unique',
                       baseAttribute: attr.name,
                       contextType: index === 0 ? 'parent-id' : 
                                    index === 1 ? 'parent-class' :
@@ -785,13 +779,15 @@ if (!window.universalLocatorInjected) {
                 if (!isUnique || isShadowElement) {
                   const uniqueSelectors = generateUniqueSelector(el, combinedSelector);
                   uniqueSelectors.slice(1).slice(0, 2).forEach((uniqueSelector, index) => {
+                    const contextualIsUnique = !isShadowElement && isSelectorUnique(uniqueSelector);
+                    
                     elementData.locators.secondary.push({
                       type: `class-contextual-${index + 1}`,
                       selector: uniqueSelector,
                       value: classes.join(' '),
                       shadowDOM: isShadowElement,
-                      isUnique: !isShadowElement && isSelectorUnique(uniqueSelector),
-                      uniquenessLevel: 'contextual-class'
+                      isUnique: contextualIsUnique,
+                      uniquenessLevel: contextualIsUnique ? 'contextual-unique' : 'contextual-non-unique'
                     });
                   });
                 }
@@ -817,13 +813,15 @@ if (!window.universalLocatorInjected) {
                     const uniqueSelectors = generateUniqueSelector(el, singleSelector);
                     const bestContextual = uniqueSelectors.slice(1)[0]; // Take the first contextual selector
                     if (bestContextual) {
+                      const contextualIsUnique = !isShadowElement && isSelectorUnique(bestContextual);
+                      
                       elementData.locators.secondary.push({
                         type: 'single-class-contextual',
                         selector: bestContextual,
                         value: className,
                         shadowDOM: isShadowElement,
-                        isUnique: !isShadowElement && isSelectorUnique(bestContextual),
-                        uniquenessLevel: 'contextual-single-class'
+                        isUnique: contextualIsUnique,
+                        uniquenessLevel: contextualIsUnique ? 'contextual-unique' : 'contextual-non-unique'
                       });
                     }
                   }
@@ -989,6 +987,28 @@ if (!window.universalLocatorInjected) {
         }
         break;
         
+      case 'startElementScan':
+        try {
+          console.log('🎯 Starting element scan mode...');
+          startElementScanMode();
+          sendResponse({ success: true });
+        } catch (error) {
+          console.error('Error starting element scan mode:', error);
+          sendResponse({ success: false, error: error.message });
+        }
+        break;
+        
+      case 'stopElementScan':
+        try {
+          console.log('🎯 Stopping element scan mode...');
+          stopElementScanMode();
+          sendResponse({ success: true });
+        } catch (error) {
+          console.error('Error stopping element scan mode:', error);
+          sendResponse({ success: false, error: error.message });
+        }
+        break;
+        
       default:
         sendResponse({ success: false, error: 'Unknown action' });
     }
@@ -1005,6 +1025,8 @@ function generateUniqueSelector(element, baseSelector) {
   const selectors = [];
   const prefix = '';
   
+  console.log('🔧 Generating contextual selectors for base:', baseSelector);
+  
   // Start with the base selector
   selectors.push(`${prefix}${baseSelector}`);
   
@@ -1013,19 +1035,25 @@ function generateUniqueSelector(element, baseSelector) {
   if (parent) {
     // Parent with ID
     if (parent.id) {
-      selectors.push(`${prefix}#${parent.id} ${baseSelector}`);
+      const contextualSelector = `${prefix}#${parent.id} ${baseSelector}`;
+      selectors.push(contextualSelector);
+      console.log('🔧 Added parent ID context:', contextualSelector);
     }
     
     // Parent with unique class
     if (parent.className) {
       const parentClasses = parent.className.trim().split(/\s+/).filter(c => c);
       if (parentClasses.length > 0) {
-        selectors.push(`${prefix}.${parentClasses[0]} ${baseSelector}`);
+        const contextualSelector = `${prefix}.${parentClasses[0]} ${baseSelector}`;
+        selectors.push(contextualSelector);
+        console.log('🔧 Added parent class context:', contextualSelector);
       }
     }
     
     // Parent tag name context
-    selectors.push(`${prefix}${parent.tagName.toLowerCase()} ${baseSelector}`);
+    const tagContextSelector = `${prefix}${parent.tagName.toLowerCase()} ${baseSelector}`;
+    selectors.push(tagContextSelector);
+    console.log('🔧 Added parent tag context:', tagContextSelector);
     
     // Sibling index context (nth-child)
     const siblings = Array.from(parent.children);
@@ -1078,6 +1106,7 @@ function generateUniqueSelector(element, baseSelector) {
     }
   }
   
+  console.log(`🔧 Generated ${selectors.length} contextual selectors:`, selectors);
   return selectors;
 }
 
@@ -1089,9 +1118,883 @@ function isSelectorUnique(selector, shadowDOM = false) {
       // For now, assume it might not be unique
       return false;
     }
-    const elements = document.querySelectorAll(selector);
-    return elements.length === 1;
+    
+    // Clean the selector - remove prefix spaces/artifacts
+    const cleanSelector = selector.trim();
+    
+    console.log('🔍 Checking uniqueness for selector:', cleanSelector);
+    
+    const elements = document.querySelectorAll(cleanSelector);
+    const isUnique = elements.length === 1;
+    
+    console.log(`🎯 Selector "${cleanSelector}" found ${elements.length} elements - Unique: ${isUnique}`);
+    
+    // Also log the first few elements found for debugging
+    if (elements.length > 0 && elements.length <= 5) {
+      console.log('🔍 Found elements:', Array.from(elements).map(el => ({
+        tag: el.tagName,
+        id: el.id || 'no-id',
+        classes: el.className || 'no-classes'
+      })));
+    }
+    
+    return isUnique;
   } catch (e) {
+    console.warn('⚠️ Error checking selector uniqueness:', e.message, 'for selector:', selector);
     return false;
   }
+}
+
+// Element scan mode functionality
+if (!window.isElementScanMode) {
+  window.isElementScanMode = false;
+}
+if (!window.scanModeHoverElement) {
+  window.scanModeHoverElement = null;
+}
+if (!window.scanModeEventListeners) {
+  window.scanModeEventListeners = [];
+}
+
+function startElementScanMode() {
+  console.log('🎯 Starting element scan mode...');
+  
+  if (window.isElementScanMode) {
+    console.log('🎯 Element scan mode already active');
+    return;
+  }
+  
+  window.isElementScanMode = true;
+  
+  // Clear any existing highlights
+  clearAllHighlighting();
+  
+  // Create overlay to indicate scan mode is active
+  createScanModeOverlay();
+  
+  // Add event listeners for hover and click
+  const hoverListener = (event) => {
+    if (!window.isElementScanMode) return;
+    
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const element = event.target;
+    
+    // Clear previous hover highlight
+    if (window.scanModeHoverElement) {
+      removeScanModeHighlight(window.scanModeHoverElement);
+    }
+    
+    // Highlight current hover element
+    window.scanModeHoverElement = element;
+    addScanModeHighlight(element);
+  };
+  
+  const clickListener = (event) => {
+    if (!window.isElementScanMode) return;
+    
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const element = event.target;
+    console.log('🎯 Element selected for scanning:', element);
+    
+    // Scan the selected element
+    scanSelectedElement(element);
+    
+    // Exit scan mode
+    stopElementScanMode();
+  };
+  
+  const escapeListener = (event) => {
+    if (!window.isElementScanMode) return;
+    
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      console.log('🎯 Escape pressed - exiting scan mode');
+      stopElementScanMode();
+    }
+  };
+  
+  // Add event listeners
+  document.addEventListener('mouseover', hoverListener, true);
+  document.addEventListener('click', clickListener, true);
+  document.addEventListener('keydown', escapeListener, true);
+  
+  // Store listeners for cleanup
+  window.scanModeEventListeners = [
+    { element: document, event: 'mouseover', listener: hoverListener, capture: true },
+    { element: document, event: 'click', listener: clickListener, capture: true },
+    { element: document, event: 'keydown', listener: escapeListener, capture: true }
+  ];
+  
+  console.log('🎯 Element scan mode activated - hover to highlight, click to select, ESC to exit');
+}
+
+function stopElementScanMode() {
+  console.log('🎯 Stopping element scan mode...');
+  
+  if (!window.isElementScanMode) {
+    console.log('🎯 Element scan mode not active');
+    return;
+  }
+  
+  window.isElementScanMode = false;
+  
+  // Clear hover highlight
+  if (window.scanModeHoverElement) {
+    removeScanModeHighlight(window.scanModeHoverElement);
+    window.scanModeHoverElement = null;
+  }
+  
+  // Remove event listeners
+  window.scanModeEventListeners.forEach(({ element, event, listener, capture }) => {
+    element.removeEventListener(event, listener, capture);
+  });
+  window.scanModeEventListeners = [];
+  
+  // Remove scan mode overlay
+  removeScanModeOverlay();
+  
+  console.log('🎯 Element scan mode deactivated');
+}
+
+function createScanModeOverlay() {
+  // Remove existing overlay if any
+  removeScanModeOverlay();
+  
+  const overlay = document.createElement('div');
+  overlay.id = 'universal-locator-scan-overlay';
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 100, 200, 0.05);
+    z-index: 999998;
+    pointer-events: none;
+    border: 3px solid #0066cc;
+    box-sizing: border-box;
+  `;
+  
+  const instruction = document.createElement('div');
+  instruction.id = 'universal-locator-scan-instruction';
+  instruction.style.cssText = `
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #0066cc;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    z-index: 999999;
+    pointer-events: none;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  `;
+  instruction.textContent = '🎯 Element Scan Mode: Hover to highlight, Click to select, ESC to exit';
+  
+  document.body.appendChild(overlay);
+  document.body.appendChild(instruction);
+}
+
+function removeScanModeOverlay() {
+  const overlay = document.getElementById('universal-locator-scan-overlay');
+  if (overlay) {
+    overlay.remove();
+  }
+  
+  // Remove instruction by ID
+  const instruction = document.getElementById('universal-locator-scan-instruction');
+  if (instruction) {
+    instruction.remove();
+  }
+}
+
+function addScanModeHighlight(element) {
+  if (!element) return;
+  
+  // Store original styles
+  if (!element._originalScanStyles) {
+    element._originalScanStyles = {
+      outline: element.style.outline || '',
+      backgroundColor: element.style.backgroundColor || '',
+      boxShadow: element.style.boxShadow || '',
+      transform: element.style.transform || '',
+      transition: element.style.transition || ''
+    };
+  }
+  
+  // Apply hover highlight styles
+  element.style.outline = '3px solid #ff6b35';
+  element.style.backgroundColor = 'rgba(255, 107, 53, 0.2)';
+  element.style.boxShadow = '0 0 10px rgba(255, 107, 53, 0.5)';
+  element.style.transition = 'all 0.2s ease';
+  element.classList.add('universal-locator-scan-hover');
+}
+
+function removeScanModeHighlight(element) {
+  if (!element || !element._originalScanStyles) return;
+  
+  // Restore original styles
+  const original = element._originalScanStyles;
+  element.style.outline = original.outline;
+  element.style.backgroundColor = original.backgroundColor;
+  element.style.boxShadow = original.boxShadow;
+  element.style.transform = original.transform;
+  element.style.transition = original.transition;
+  
+  element.classList.remove('universal-locator-scan-hover');
+  delete element._originalScanStyles;
+}
+
+function scanSelectedElement(element) {
+  console.log('🎯 Scanning selected element:', element);
+  
+  try {
+    // Generate comprehensive locators for the selected element
+    const elementData = generateElementData(element);
+    
+    console.log('🎯 Generated element data:', elementData);
+    
+    // Show locators popup directly on the page
+    showElementLocatorsOnPage(elementData);
+    
+    // Also send the element data back to the popup (if it's open)
+    chrome.runtime.sendMessage({
+      action: 'elementScanned',
+      elementData: elementData
+    }, (response) => {
+      console.log('🎯 Message sent response:', response);
+    });
+    
+    console.log('🎯 Element data processed and popup shown');
+    
+  } catch (error) {
+    console.error('🎯 Error scanning selected element:', error);
+    chrome.runtime.sendMessage({
+      action: 'elementScanError',
+      error: error.message
+    });
+  }
+}
+
+function generateElementData(element) {
+  const rect = element.getBoundingClientRect();
+  const isShadowElement = element.getRootNode() !== document;
+  
+  // Generate comprehensive element data similar to the main scan
+  const elementData = {
+    tagName: element.tagName.toLowerCase(),
+    text: getCleanText(element),
+    isShadowDOM: isShadowElement,
+    position: {
+      x: Math.round(rect.left + window.scrollX),
+      y: Math.round(rect.top + window.scrollY),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height)
+    },
+    textContent: {
+      innerText: (element.innerText || '').trim().substring(0, 200),
+      textContent: (element.textContent || '').trim().substring(0, 200),
+      cleanText: getCleanText(element),
+      hasText: !!(element.innerText || element.textContent || '').trim()
+    },
+    context: {
+      parentTagName: element.parentElement ? element.parentElement.tagName.toLowerCase() : null,
+      parentId: element.parentElement ? element.parentElement.id || null : null,
+      parentClasses: element.parentElement ? Array.from(element.parentElement.classList) : [],
+      childrenCount: element.children.length,
+      siblingIndex: Array.from(element.parentElement?.children || []).indexOf(element),
+      nestingLevel: getElementNestingLevel(element)
+    },
+    attributes: getAllAttributes(element),
+    elementState: {
+      isFormElement: ['input', 'select', 'textarea', 'button'].includes(element.tagName.toLowerCase()),
+      isInteractive: isInteractiveElement(element),
+      isVisible: isElementVisible(element),
+      hasChildren: element.children.length > 0,
+      isEmptyElement: !element.textContent?.trim() && element.children.length === 0
+    },
+    styling: {
+      computedStyles: getRelevantStyles(element),
+      displayType: window.getComputedStyle(element).display,
+      visibility: window.getComputedStyle(element).visibility,
+      opacity: window.getComputedStyle(element).opacity
+    },
+    locators: {
+      primary: [],
+      secondary: [],
+      fallback: []
+    }
+  };
+  
+  // Generate locators for this specific element (similar to scan logic)
+  generateLocatorsForElement(element, elementData, isShadowElement);
+  
+  return elementData;
+}
+
+function generateLocatorsForElement(element, elementData, isShadowElement) {
+  const prefix = '';
+  
+  // 1. ID locators
+  if (element.id) {
+    const baseSelector = `#${element.id}`;
+    const isUnique = !isShadowElement && isSelectorUnique(baseSelector);
+    
+    elementData.locators.primary.push({
+      type: 'id',
+      selector: prefix + baseSelector,
+      value: element.id,
+      shadowDOM: isShadowElement,
+      isUnique: isUnique,
+      uniquenessLevel: isUnique ? 'unique' : 'duplicate-id'
+    });
+    
+    if (!isUnique || isShadowElement) {
+      const uniqueSelectors = generateUniqueSelector(element, baseSelector);
+      uniqueSelectors.slice(1).slice(0, 3).forEach((uniqueSelector, index) => {
+        elementData.locators.primary.push({
+          type: `id-contextual-${index + 1}`,
+          selector: prefix + uniqueSelector,
+          value: element.id,
+          shadowDOM: isShadowElement,
+          isUnique: !isShadowElement && isSelectorUnique(uniqueSelector),
+          uniquenessLevel: 'contextual-id',
+          baseAttribute: 'id'
+        });
+      });
+    }
+  }
+  
+  // 2. Data attributes
+  for (const attr of element.attributes) {
+    if (attr.name.startsWith('data-')) {
+      const baseSelector = `[${attr.name}="${attr.value}"]`;
+      const isUnique = !isShadowElement && isSelectorUnique(baseSelector);
+      
+      elementData.locators.primary.push({
+        type: attr.name,
+        selector: prefix + baseSelector,
+        value: attr.value,
+        shadowDOM: isShadowElement,
+        isUnique: isUnique,
+        uniquenessLevel: isUnique ? 'unique' : 'non-unique'
+      });
+      
+      if (!isUnique || isShadowElement) {
+        const uniqueSelectors = generateUniqueSelector(element, baseSelector);
+        uniqueSelectors.slice(1).slice(0, 2).forEach((uniqueSelector, index) => {
+          elementData.locators.primary.push({
+            type: `${attr.name}-contextual-${index + 1}`,
+            selector: prefix + uniqueSelector,
+            value: attr.value,
+            shadowDOM: isShadowElement,
+            isUnique: !isShadowElement && isSelectorUnique(uniqueSelector),
+            uniquenessLevel: 'contextual-data',
+            baseAttribute: attr.name
+          });
+        });
+      }
+    }
+  }
+  
+  // 3. Name attribute (for form elements)
+  if (element.name) {
+    const baseSelector = `[name="${element.name}"]`;
+    const tagSelector = `${element.tagName.toLowerCase()}[name="${element.name}"]`;
+    
+    elementData.locators.secondary.push({
+      type: 'name',
+      selector: prefix + baseSelector,
+      value: element.name,
+      shadowDOM: isShadowElement,
+      isUnique: !isShadowElement && isSelectorUnique(baseSelector)
+    });
+    
+    elementData.locators.secondary.push({
+      type: 'name-with-tag',
+      selector: prefix + tagSelector,
+      value: element.name,
+      shadowDOM: isShadowElement,
+      isUnique: !isShadowElement && isSelectorUnique(tagSelector)
+    });
+  }
+  
+  // 4. Class-based selectors
+  if (element.className && element.className.trim()) {
+    const classes = element.className.trim().split(/\s+/).filter(c => c);
+    
+    // Single class selectors
+    classes.slice(0, 3).forEach(className => {
+      const baseSelector = `.${className}`;
+      const tagSelector = `${element.tagName.toLowerCase()}.${className}`;
+      
+      elementData.locators.secondary.push({
+        type: 'class',
+        selector: prefix + baseSelector,
+        value: className,
+        shadowDOM: isShadowElement,
+        isUnique: !isShadowElement && isSelectorUnique(baseSelector)
+      });
+      
+      elementData.locators.secondary.push({
+        type: 'class-with-tag',
+        selector: prefix + tagSelector,
+        value: className,
+        shadowDOM: isShadowElement,
+        isUnique: !isShadowElement && isSelectorUnique(tagSelector)
+      });
+    });
+    
+    // Combined class selectors
+    if (classes.length > 1) {
+      const combinedSelector = `.${classes.join('.')}`;
+      const combinedTagSelector = `${element.tagName.toLowerCase()}${combinedSelector}`;
+      
+      elementData.locators.secondary.push({
+        type: 'multiple-classes',
+        selector: prefix + combinedSelector,
+        value: classes.join(' '),
+        shadowDOM: isShadowElement,
+        isUnique: !isShadowElement && isSelectorUnique(combinedSelector)
+      });
+      
+      elementData.locators.secondary.push({
+        type: 'multiple-classes-with-tag',
+        selector: prefix + combinedTagSelector,
+        value: classes.join(' '),
+        shadowDOM: isShadowElement,
+        isUnique: !isShadowElement && isSelectorUnique(combinedTagSelector)
+      });
+    }
+  }
+  
+  // 5. Text-based selectors
+  const cleanText = getCleanText(element);
+  if (cleanText && cleanText.length > 0 && cleanText.length <= 50) {
+    // Exact text match
+    elementData.locators.secondary.push({
+      type: 'text-exact',
+      selector: `${prefix}:contains("${cleanText}")`,
+      value: cleanText,
+      shadowDOM: isShadowElement,
+      note: 'CSS :contains() not standard - use XPath instead'
+    });
+    
+    // Tag with text
+    elementData.locators.secondary.push({
+      type: 'tag-with-text',
+      selector: `${prefix}${element.tagName.toLowerCase()}:contains("${cleanText}")`,
+      value: cleanText,
+      shadowDOM: isShadowElement,
+      note: 'CSS :contains() not standard - use XPath instead'
+    });
+    
+    // XPath text selectors
+    elementData.locators.fallback.push({
+      type: 'xpath-text-exact',
+      selector: `//${element.tagName.toLowerCase()}[text()="${cleanText}"]`,
+      value: cleanText,
+      shadowDOM: isShadowElement,
+      selectorType: 'xpath'
+    });
+    
+    elementData.locators.fallback.push({
+      type: 'xpath-text-contains',
+      selector: `//${element.tagName.toLowerCase()}[contains(text(),"${cleanText}")]`,
+      value: cleanText,
+      shadowDOM: isShadowElement,
+      selectorType: 'xpath'
+    });
+  }
+  
+  // 6. Positional/structural selectors
+  if (element.parentElement) {
+    const siblings = Array.from(element.parentElement.children);
+    const index = siblings.indexOf(element);
+    
+    if (index >= 0) {
+      // nth-child
+      elementData.locators.fallback.push({
+        type: 'nth-child',
+        selector: `${prefix}${element.tagName.toLowerCase()}:nth-child(${index + 1})`,
+        value: index + 1,
+        shadowDOM: isShadowElement,
+        note: 'Position-based - may be fragile'
+      });
+      
+      // nth-of-type
+      const sameTagSiblings = siblings.filter(s => s.tagName === element.tagName);
+      const typeIndex = sameTagSiblings.indexOf(element);
+      if (typeIndex >= 0) {
+        elementData.locators.fallback.push({
+          type: 'nth-of-type',
+          selector: `${prefix}${element.tagName.toLowerCase()}:nth-of-type(${typeIndex + 1})`,
+          value: typeIndex + 1,
+          shadowDOM: isShadowElement,
+          note: 'Position-based - may be fragile'
+        });
+      }
+    }
+  }
+  
+  // 7. Attribute-based selectors (other than id, name, class, data-*)
+  for (const attr of element.attributes) {
+    if (!['id', 'class', 'name'].includes(attr.name) && !attr.name.startsWith('data-')) {
+      const baseSelector = `[${attr.name}="${attr.value}"]`;
+      const tagSelector = `${element.tagName.toLowerCase()}[${attr.name}="${attr.value}"]`;
+      
+      elementData.locators.fallback.push({
+        type: `attribute-${attr.name}`,
+        selector: prefix + baseSelector,
+        value: attr.value,
+        shadowDOM: isShadowElement,
+        isUnique: !isShadowElement && isSelectorUnique(baseSelector)
+      });
+      
+      elementData.locators.fallback.push({
+        type: `attribute-${attr.name}-with-tag`,
+        selector: prefix + tagSelector,
+        value: attr.value,
+        shadowDOM: isShadowElement,
+        isUnique: !isShadowElement && isSelectorUnique(tagSelector)
+      });
+    }
+  }
+}
+
+// Function to show element locators popup directly on the page
+function showElementLocatorsOnPage(elementData) {
+  console.log('🎯 Showing element locators on page:', elementData);
+  
+  // Remove existing popup if any
+  const existingPopup = document.getElementById('universal-locator-element-popup');
+  if (existingPopup) {
+    existingPopup.remove();
+  }
+  
+  const popup = document.createElement('div');
+  popup.id = 'universal-locator-element-popup';
+  popup.style.cssText = `
+    position: fixed;
+    top: 50px;
+    right: 20px;
+    width: 400px;
+    max-height: 80vh;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    z-index: 999999;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    border: 2px solid #0066cc;
+    overflow: hidden;
+  `;
+  
+  const header = document.createElement('div');
+  header.style.cssText = `
+    padding: 15px 20px;
+    background: #0066cc;
+    color: white;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: move;
+    user-select: none;
+  `;
+  
+  const title = document.createElement('h3');
+  title.style.cssText = `
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+  `;
+  title.textContent = `🎯 Element Locators: ${elementData.tagName.toUpperCase()}`;
+  
+  const closeBtn = document.createElement('button');
+  closeBtn.style.cssText = `
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    border-radius: 4px;
+    padding: 5px 10px;
+    cursor: pointer;
+    font-size: 14px;
+    color: white;
+    font-weight: bold;
+  `;
+  closeBtn.textContent = '✕';
+  closeBtn.onclick = () => popup.remove();
+  
+  header.appendChild(title);
+  header.appendChild(closeBtn);
+  
+  // Make popup draggable
+  let isDragging = false;
+  let startX, startY, startLeft, startTop;
+  
+  header.addEventListener('mousedown', (e) => {
+    isDragging = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    startLeft = popup.offsetLeft;
+    startTop = popup.offsetTop;
+    header.style.cursor = 'grabbing';
+  });
+  
+  document.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    e.preventDefault();
+    const deltaX = e.clientX - startX;
+    const deltaY = e.clientY - startY;
+    popup.style.left = (startLeft + deltaX) + 'px';
+    popup.style.top = (startTop + deltaY) + 'px';
+    popup.style.right = 'auto';
+  });
+  
+  document.addEventListener('mouseup', () => {
+    if (isDragging) {
+      isDragging = false;
+      header.style.cursor = 'move';
+    }
+  });
+  
+  const body = document.createElement('div');
+  body.style.cssText = `
+    padding: 20px;
+    max-height: 60vh;
+    overflow-y: auto;
+    background: #f8f9fa;
+  `;
+  
+  // Element info
+  const elementInfo = document.createElement('div');
+  elementInfo.style.cssText = `
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 6px;
+    margin-bottom: 15px;
+  `;
+  
+  elementInfo.innerHTML = `
+    <div style="margin-bottom: 10px;">
+      <strong>Tag:</strong> ${elementData.tagName.toUpperCase()}
+      ${elementData.isShadowDOM ? ' <span style="color: #e67e22; font-weight: bold;">(Shadow DOM)</span>' : ''}
+    </div>
+    ${elementData.textContent && elementData.textContent.cleanText ? `<div style="margin-bottom: 10px;"><strong>Text:</strong> "${elementData.textContent.cleanText}"</div>` : ''}
+    ${elementData.attributes && elementData.attributes.id ? `<div style="margin-bottom: 10px;"><strong>ID:</strong> ${elementData.attributes.id}</div>` : ''}
+    ${elementData.attributes && elementData.attributes.class ? `<div style="margin-bottom: 10px;"><strong>Classes:</strong> ${elementData.attributes.class}</div>` : ''}
+    <div><strong>Position:</strong> ${elementData.position.x}, ${elementData.position.y} (${elementData.position.width}x${elementData.position.height})</div>
+  `;
+  
+  body.appendChild(elementInfo);
+  
+  // Locators sections
+  const locatorSections = [
+    { title: 'Primary Locators (Recommended)', locators: elementData.locators.primary || [], style: 'background: #d4edda; border-left: 4px solid #28a745;' },
+    { title: 'Secondary Locators', locators: elementData.locators.secondary || [], style: 'background: #fff3cd; border-left: 4px solid #ffc107;' },
+    { title: 'Fallback Locators', locators: elementData.locators.fallback || [], style: 'background: #f8d7da; border-left: 4px solid #dc3545;' }
+  ];
+  
+  locatorSections.forEach(section => {
+    if (section.locators.length > 0) {
+      const sectionDiv = document.createElement('div');
+      sectionDiv.style.cssText = `margin-bottom: 20px;`;
+      
+      const sectionTitle = document.createElement('h3');
+      sectionTitle.style.cssText = `
+        margin: 0 0 10px 0;
+        font-size: 16px;
+        color: #333;
+      `;
+      sectionTitle.textContent = `${section.title} (${section.locators.length})`;
+      
+      sectionDiv.appendChild(sectionTitle);
+      
+      section.locators.forEach((locator) => {
+        const locatorDiv = document.createElement('div');
+        locatorDiv.style.cssText = `
+          ${section.style}
+          padding: 12px;
+          margin-bottom: 8px;
+          border-radius: 4px;
+          font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        `;
+        
+        const selectorDiv = document.createElement('div');
+        selectorDiv.style.cssText = `
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          margin-bottom: 5px;
+        `;
+        
+        const selectorText = document.createElement('code');
+        selectorText.style.cssText = `
+          flex: 1;
+          background: rgba(0, 0, 0, 0.05);
+          padding: 4px 8px;
+          border-radius: 3px;
+          font-size: 12px;
+          word-break: break-all;
+        `;
+        selectorText.textContent = locator.selector;
+        
+        const copyBtn = document.createElement('button');
+        copyBtn.style.cssText = `
+          background: #007bff;
+          color: white;
+          border: none;
+          border-radius: 3px;
+          padding: 4px 8px;
+          cursor: pointer;
+          font-size: 11px;
+          white-space: nowrap;
+        `;
+        copyBtn.textContent = '📋 Copy';
+        copyBtn.onclick = () => {
+          navigator.clipboard.writeText(locator.selector);
+          copyBtn.textContent = '✅ Copied!';
+          setTimeout(() => {
+            copyBtn.textContent = '📋 Copy';
+          }, 2000);
+        };
+        
+        const highlightBtn = document.createElement('button');
+        highlightBtn.style.cssText = `
+          background: #28a745;
+          color: white;
+          border: none;
+          border-radius: 3px;
+          padding: 4px 8px;
+          cursor: pointer;
+          font-size: 11px;
+          white-space: nowrap;
+        `;
+        highlightBtn.textContent = '🎯 Test';
+        highlightBtn.onclick = () => {
+          try {
+            console.log('🎯 Testing selector:', locator.selector);
+            
+            // Test the selector by highlighting elements
+            const elements = findAllElementsBySelectorIncludingShadowDOM(locator.selector);
+            console.log(`🎯 Found ${elements.length} elements for selector:`, locator.selector);
+            
+            if (elements.length > 0) {
+              const success = highlightAllElements(elements);
+              if (success) {
+                highlightBtn.textContent = `✅ Found ${elements.length}!`;
+                highlightBtn.style.background = '#28a745';
+                
+                // Auto-scroll to first element
+                if (elements[0]) {
+                  try {
+                    elements[0].scrollIntoView({ 
+                      behavior: 'smooth', 
+                      block: 'center', 
+                      inline: 'center' 
+                    });
+                  } catch (scrollError) {
+                    console.warn('Could not scroll to element:', scrollError);
+                  }
+                }
+              } else {
+                highlightBtn.textContent = '❌ Highlight failed';
+                highlightBtn.style.background = '#dc3545';
+              }
+            } else {
+              highlightBtn.textContent = '❌ None found';
+              highlightBtn.style.background = '#dc3545';
+            }
+            
+            setTimeout(() => {
+              highlightBtn.textContent = '🎯 Test';
+              highlightBtn.style.background = '#28a745';
+            }, 3000);
+            
+          } catch (error) {
+            console.error('Error testing selector:', error);
+            highlightBtn.textContent = '❌ Error';
+            highlightBtn.style.background = '#dc3545';
+            setTimeout(() => {
+              highlightBtn.textContent = '🎯 Test';
+              highlightBtn.style.background = '#28a745';
+            }, 3000);
+          }
+        };
+        
+        selectorDiv.appendChild(selectorText);
+        selectorDiv.appendChild(copyBtn);
+        selectorDiv.appendChild(highlightBtn);
+        
+        const metaDiv = document.createElement('div');
+        metaDiv.style.cssText = `
+          font-size: 11px;
+          color: #666;
+          margin-top: 5px;
+        `;
+        
+        let metaInfo = `Type: ${locator.type}`;
+        if (locator.isUnique !== undefined) {
+          metaInfo += ` | Unique: ${locator.isUnique ? '✅' : '❌'}`;
+        }
+        if (locator.shadowDOM) {
+          metaInfo += ' | Shadow DOM';
+        }
+        if (locator.note) {
+          metaInfo += ` | Note: ${locator.note}`;
+        }
+        
+        metaDiv.textContent = metaInfo;
+        
+        locatorDiv.appendChild(selectorDiv);
+        locatorDiv.appendChild(metaDiv);
+        
+        sectionDiv.appendChild(locatorDiv);
+      });
+      
+      body.appendChild(sectionDiv);
+    }
+  });
+  
+  // If no locators were generated, show a message
+  if ((!elementData.locators.primary || elementData.locators.primary.length === 0) &&
+      (!elementData.locators.secondary || elementData.locators.secondary.length === 0) &&
+      (!elementData.locators.fallback || elementData.locators.fallback.length === 0)) {
+    const noLocatorsDiv = document.createElement('div');
+    noLocatorsDiv.style.cssText = `
+      background: #f8d7da;
+      border-left: 4px solid #dc3545;
+      padding: 15px;
+      border-radius: 4px;
+      text-align: center;
+    `;
+    noLocatorsDiv.innerHTML = `
+      <h3 style="margin: 0 0 10px 0; color: #721c24;">No Locators Generated</h3>
+      <p style="margin: 0; color: #721c24;">This element might not have sufficient identifying attributes for reliable locator generation.</p>
+    `;
+    body.appendChild(noLocatorsDiv);
+  }
+  
+  // Create content container
+  const content = document.createElement('div');
+  content.appendChild(header);
+  content.appendChild(body);
+  popup.appendChild(content);
+  
+  document.body.appendChild(popup);
+  
+  // Auto-focus first copy button for keyboard users
+  const firstCopyBtn = popup.querySelector('button[onclick]');
+  if (firstCopyBtn) {
+    firstCopyBtn.focus();
+  }
+  
+  console.log('🎯 Element locators popup created and displayed');
 }
