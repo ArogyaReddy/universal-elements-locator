@@ -303,19 +303,20 @@ function highlightElement(element, skipClearAndScroll = false) {
   const originalZIndex = element.style.zIndex;
   const originalTransition = element.style.transition;
   const originalBackground = element.style.backgroundColor;
-  const originalTransform = element.style.transform;
+  // Removed originalTransform since we're not using transform anymore
   
   console.log('💾 Stored original styles for element');
   
   // Apply bright orange/red highlighting with maximum visibility
-  element.style.transition = 'all 0.3s ease';
+  element.style.transition = 'all 0.3s ease !important';
   element.style.outline = '5px solid #ff4500 !important';
   element.style.boxShadow = '0 0 30px rgba(255, 69, 0, 1), inset 0 0 30px rgba(255, 69, 0, 0.4) !important';
   element.style.zIndex = '999999 !important';
   element.style.backgroundColor = 'rgba(255, 69, 0, 0.2) !important';
-  element.style.transform = 'scale(1.02)';
+  // Remove scaling to prevent layout shifts
+  // element.style.transform = 'scale(1.02)'; // REMOVED
   
-  console.log('🎨 Applied orange highlighting styles');
+  console.log('🎨 Applied orange highlighting styles (no scaling)');
   
   // Store element and original styles for cleanup
   element._originalStyles = {
@@ -323,8 +324,8 @@ function highlightElement(element, skipClearAndScroll = false) {
     boxShadow: originalBoxShadow,
     zIndex: originalZIndex,
     transition: originalTransition,
-    backgroundColor: originalBackground,
-    transform: originalTransform
+    backgroundColor: originalBackground
+    // Removed transform since we're not using it anymore
   };
   
   window.highlightedElements.push(element);
@@ -348,6 +349,53 @@ function highlightElement(element, skipClearAndScroll = false) {
   }, 300);
   
   console.log('✅ UI highlighting completed for element:', element.tagName);
+}
+
+// Lightweight highlight function for testing selectors (no scaling/layout changes)
+function highlightElementLightly(element, skipClearAndScroll = false) {
+  if (!element) {
+    console.error('❌ No element provided for light highlighting');
+    return;
+  }
+  
+  console.log('🎯 Applying light highlight to element:', element.tagName, element.id || element.className);
+  
+  // Clear any existing highlights first (only for the first element)
+  if (!skipClearAndScroll) {
+    clearHighlights();
+  }
+  
+  // Store original styles
+  const originalOutline = element.style.outline;
+  const originalBoxShadow = element.style.boxShadow;
+  const originalZIndex = element.style.zIndex;
+  const originalTransition = element.style.transition;
+  const originalBackground = element.style.backgroundColor;
+  
+  console.log('💾 Stored original styles for light highlighting');
+  
+  // Apply light highlighting WITHOUT scaling or transform changes
+  element.style.transition = 'all 0.2s ease !important';
+  element.style.outline = '3px solid #ff6b35 !important';
+  element.style.boxShadow = '0 0 15px rgba(255, 107, 53, 0.8) !important';
+  element.style.zIndex = '999998 !important';
+  element.style.backgroundColor = 'rgba(255, 107, 53, 0.15) !important';
+  // NO TRANSFORM/SCALING to prevent layout shifts
+  
+  console.log('🎨 Applied light orange highlighting styles');
+  
+  // Store element and original styles for cleanup
+  element._originalStyles = {
+    outline: originalOutline,
+    boxShadow: originalBoxShadow,
+    zIndex: originalZIndex,
+    transition: originalTransition,
+    backgroundColor: originalBackground
+  };
+  
+  window.highlightedElements.push(element);
+  
+  console.log('✅ Light highlighting completed for element:', element.tagName);
 }
 
 function clearAllHighlighting() {
@@ -1302,59 +1350,63 @@ function createElementLocatorsPopup(elementData) {
   const popup = document.createElement('div');
   popup.id = 'universal-locator-popup';
   popup.style.cssText = `
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    width: 400px;
-    max-height: 500px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border: none;
-    border-radius: 12px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-    z-index: 999999;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    color: white;
-    overflow: hidden;
-    resize: both;
-    min-width: 300px;
-    min-height: 200px;
+    position: fixed !important;
+    top: 20px !important;
+    right: 20px !important;
+    width: 500px !important;
+    max-height: 650px !important;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    border: none !important;
+    border-radius: 20px !important;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5) !important;
+    z-index: 999999 !important;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+    color: white !important;
+    overflow: hidden !important;
+    resize: both !important;
+    min-width: 400px !important;
+    min-height: 300px !important;
   `;
   
   // Create header (draggable)
   const header = document.createElement('div');
   header.style.cssText = `
-    padding: 15px 20px;
-    background: rgba(255, 255, 255, 0.1);
+    padding: 18px 24px;
+    background: rgba(255, 255, 255, 0.15);
     cursor: move;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.25);
   `;
   
   const title = document.createElement('h3');
   title.style.cssText = `
     margin: 0;
-    font-size: 16px;
+    font-size: 17px;
     font-weight: 600;
+    letter-spacing: 0.3px;
   `;
   title.textContent = `🎯 Element Locators: ${elementData.tagName.toUpperCase()}`;
   
   const closeBtn = document.createElement('button');
   closeBtn.style.cssText = `
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.25);
     border: none;
     color: white;
-    width: 30px;
-    height: 30px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
     cursor: pointer;
-    font-size: 18px;
+    font-size: 20px;
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: all 0.2s ease;
   `;
   closeBtn.textContent = '×';
+  closeBtn.onmouseover = () => closeBtn.style.background = 'rgba(255, 255, 255, 0.35)';
+  closeBtn.onmouseout = () => closeBtn.style.background = 'rgba(255, 255, 255, 0.25)';
   closeBtn.onclick = () => popup.remove();
   
   header.appendChild(title);
@@ -1363,23 +1415,24 @@ function createElementLocatorsPopup(elementData) {
   // Create content area
   const content = document.createElement('div');
   content.style.cssText = `
-    padding: 20px;
-    max-height: 400px;
-    overflow-y: auto;
+    padding: 30px !important;
+    max-height: 500px !important;
+    overflow-y: auto !important;
   `;
   
   // Element info
   const elementInfo = document.createElement('div');
   elementInfo.style.cssText = `
-    background: rgba(255, 255, 255, 0.1);
-    padding: 10px;
-    border-radius: 8px;
-    margin-bottom: 15px;
-    font-size: 14px;
+    background: rgba(255, 255, 255, 0.2) !important;
+    padding: 20px !important;
+    border-radius: 15px !important;
+    margin-bottom: 25px !important;
+    font-size: 15px !important;
+    line-height: 1.6 !important;
   `;
   elementInfo.innerHTML = `
-    <div><strong>Tag:</strong> ${elementData.tagName.toUpperCase()}</div>
-    <div><strong>Text:</strong> "${elementData.text}"</div>
+    <div style="margin-bottom: 12px !important;"><strong>Tag:</strong> ${elementData.tagName.toUpperCase()}</div>
+    <div style="margin-bottom: 12px !important;"><strong>Text:</strong> "${elementData.text}"</div>
     <div><strong>Position:</strong> ${elementData.position.x}, ${elementData.position.y} (${elementData.position.width}×${elementData.position.height})</div>
   `;
   
@@ -1390,10 +1443,11 @@ function createElementLocatorsPopup(elementData) {
     if (elementData.locators[category].length > 0) {
       const categoryHeader = document.createElement('h4');
       categoryHeader.style.cssText = `
-        margin: 15px 0 10px 0;
-        font-size: 14px;
+        margin: 20px 0 12px 0;
+        font-size: 16px;
         text-transform: capitalize;
-        color: rgba(255, 255, 255, 0.9);
+        color: rgba(255, 255, 255, 0.95);
+        font-weight: 600;
       `;
       categoryHeader.textContent = `${category} Locators (${elementData.locators[category].length})`;
       content.appendChild(categoryHeader);
@@ -1401,40 +1455,44 @@ function createElementLocatorsPopup(elementData) {
       elementData.locators[category].forEach(locator => {
         const locatorDiv = document.createElement('div');
         locatorDiv.style.cssText = `
-          background: rgba(255, 255, 255, 0.1);
-          border: 1px solid rgba(255, 255, 255, 0.2);
-          border-radius: 6px;
-          padding: 10px;
-          margin-bottom: 8px;
-          font-size: 12px;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
+          background: rgba(255, 255, 255, 0.18) !important;
+          border: 2px solid rgba(255, 255, 255, 0.3) !important;
+          border-radius: 15px !important;
+          padding: 18px !important;
+          margin-bottom: 15px !important;
+          font-size: 14px !important;
+          display: flex !important;
+          justify-content: space-between !important;
+          align-items: flex-start !important;
+          gap: 15px !important;
         `;
         
         const selectorDiv = document.createElement('div');
         selectorDiv.style.cssText = `
           flex: 1;
-          margin-right: 10px;
+          margin-right: 12px;
         `;
         
         const selectorText = document.createElement('code');
         selectorText.style.cssText = `
-          background: rgba(0, 0, 0, 0.2);
-          padding: 4px 6px;
-          border-radius: 4px;
-          font-family: 'Monaco', 'Menlo', monospace;
-          font-size: 11px;
+          background: rgba(0, 0, 0, 0.3);
+          padding: 8px 10px;
+          border-radius: 6px;
+          font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+          font-size: 12px;
           word-break: break-all;
           display: block;
-          margin-bottom: 4px;
+          margin-bottom: 8px;
+          line-height: 1.4;
+          color: #e8f5e8;
         `;
         selectorText.textContent = locator.selector;
         
         const metaDiv = document.createElement('div');
         metaDiv.style.cssText = `
-          font-size: 10px;
-          color: rgba(255, 255, 255, 0.7);
+          font-size: 11px;
+          color: rgba(255, 255, 255, 0.75);
+          line-height: 1.3;
         `;
         metaDiv.innerHTML = `Type: ${locator.type} | Unique: ${locator.unique ? '✅' : '❌'}`;
         
@@ -1444,16 +1502,20 @@ function createElementLocatorsPopup(elementData) {
         // Copy button
         const copyBtn = document.createElement('button');
         copyBtn.style.cssText = `
-          background: rgba(255, 255, 255, 0.2);
+          background: rgba(255, 255, 255, 0.25);
           border: none;
           color: white;
-          padding: 4px 8px;
-          border-radius: 4px;
+          padding: 8px 12px;
+          border-radius: 6px;
           cursor: pointer;
-          font-size: 11px;
-          margin-right: 4px;
+          font-size: 12px;
+          margin-bottom: 6px;
+          font-weight: 500;
+          transition: all 0.2s ease;
         `;
         copyBtn.textContent = '📋 Copy';
+        copyBtn.onmouseover = () => copyBtn.style.background = 'rgba(255, 255, 255, 0.35)';
+        copyBtn.onmouseout = () => copyBtn.style.background = 'rgba(255, 255, 255, 0.25)';
         copyBtn.onclick = () => {
           navigator.clipboard.writeText(locator.selector);
           copyBtn.textContent = '✅ Copied!';
@@ -1463,15 +1525,19 @@ function createElementLocatorsPopup(elementData) {
         // Test button
         const testBtn = document.createElement('button');
         testBtn.style.cssText = `
-          background: rgba(76, 175, 80, 0.8);
+          background: rgba(76, 175, 80, 0.9);
           border: none;
           color: white;
-          padding: 4px 8px;
-          border-radius: 4px;
+          padding: 8px 12px;
+          border-radius: 6px;
           cursor: pointer;
-          font-size: 11px;
+          font-size: 12px;
+          font-weight: 500;
+          transition: all 0.2s ease;
         `;
         testBtn.textContent = '🎯 Test';
+        testBtn.onmouseover = () => testBtn.style.background = 'rgba(76, 175, 80, 1)';
+        testBtn.onmouseout = () => testBtn.style.background = 'rgba(76, 175, 80, 0.9)';
         testBtn.onclick = () => {
           // Clear existing highlights
           clearAllHighlighting();
@@ -1479,10 +1545,19 @@ function createElementLocatorsPopup(elementData) {
           // Find and highlight elements
           const elements = document.querySelectorAll(locator.selector);
           if (elements.length > 0) {
-            Array.from(elements).forEach((el, index) => {
-              highlightElement(el, index > 0);
+            // Limit highlighting to prevent layout issues
+            const maxHighlight = 10; // Only highlight first 10 elements
+            const elementsToHighlight = Array.from(elements).slice(0, maxHighlight);
+            
+            elementsToHighlight.forEach((el, index) => {
+              highlightElementLightly(el, index > 0); // Use lighter highlighting
             });
-            testBtn.textContent = `✅ Found ${elements.length}!`;
+            
+            if (elements.length > maxHighlight) {
+              testBtn.textContent = `✅ Found ${elements.length}! (Showing ${maxHighlight})`;
+            } else {
+              testBtn.textContent = `✅ Found ${elements.length}!`;
+            }
           } else {
             testBtn.textContent = '❌ Not Found';
           }
@@ -1494,7 +1569,8 @@ function createElementLocatorsPopup(elementData) {
         buttonsDiv.style.cssText = `
           display: flex;
           flex-direction: column;
-          gap: 2px;
+          gap: 6px;
+          min-width: 80px;
         `;
         buttonsDiv.appendChild(copyBtn);
         buttonsDiv.appendChild(testBtn);
